@@ -4439,6 +4439,8 @@ HTML_APP = '''<!DOCTYPE html>
             try {
                 container.innerHTML = '<div class="loading"><div style="text-align: center; padding: 1rem;">🔄 Carregando grupos...</div></div>';
 
+ codex/handle-fetch-error-in-loadinstancegroups
+
                 const response = await fetch(`${BAILEYS_URL}/groups/${instanceId}`);
                 const result = await response.json();
 
@@ -4869,6 +4871,7 @@ HTML_APP = '''<!DOCTYPE html>
 </html>'''
 
 # Inject Baileys URL from environment into frontend
+# window.BAILEYS_URL pode ser definido antes do script para apontar para outro host/porta
 BAILEYS_ENV_URL = os.environ.get("BAILEYS_URL", "")
 HTML_APP = HTML_APP.replace(
     "<body>",
