@@ -4437,7 +4437,12 @@ HTML_APP = '''<!DOCTYPE html>
             try {
                 container.innerHTML = '<div class="loading"><div style="text-align: center; padding: 1rem;">🔄 Carregando grupos...</div></div>';
 
-                const BAILEYS_URL = window.BAILEYS_URL || `${window.location.protocol}//${window.location.hostname}:3002`;
+                // window.BAILEYS_URL pode ser definido antes deste script para apontar para outro host/porta
+                const BAILEYS_URL =
+                    window.BAILEYS_URL ||
+                    (window.location.protocol === 'file:'
+                        ? 'http://localhost:3002'
+                        : `http://${window.location.hostname}:3002`); // força http como padrão
                 const response = await fetch(`${BAILEYS_URL}/groups/${instanceId}`);
                 const result = await response.json();
                 
@@ -4857,6 +4862,7 @@ HTML_APP = '''<!DOCTYPE html>
 </html>'''
 
 # Inject Baileys URL from environment into frontend
+# window.BAILEYS_URL pode ser definido antes do script para apontar para outro host/porta
 BAILEYS_ENV_URL = os.environ.get("BAILEYS_URL", "")
 HTML_APP = HTML_APP.replace(
     "<body>",
