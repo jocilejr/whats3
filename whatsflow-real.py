@@ -4428,19 +4428,20 @@ HTML_APP = '''<!DOCTYPE html>
         async function loadInstanceGroups() {
             const instanceId = document.getElementById('groupsInstanceSelect').value;
             const container = document.getElementById('available-groups-list');
-            
+
             if (!instanceId) {
                 container.innerHTML = '<div class="empty-state"><p>Selecione uma instância para ver os grupos disponíveis</p></div>';
                 return;
             }
-            
+
+            const BAILEYS_URL = window.BAILEYS_URL || `${window.location.protocol}//${window.location.hostname}:3002`;
+
             try {
                 container.innerHTML = '<div class="loading"><div style="text-align: center; padding: 1rem;">🔄 Carregando grupos...</div></div>';
 
-                const BAILEYS_URL = window.BAILEYS_URL || `${window.location.protocol}//${window.location.hostname}:3002`;
                 const response = await fetch(`${BAILEYS_URL}/groups/${instanceId}`);
                 const result = await response.json();
-                
+
                 if (response.ok && result.success && result.groups) {
                     availableGroups = result.groups.map(group => ({
                         ...group,
@@ -4450,17 +4451,28 @@ HTML_APP = '''<!DOCTYPE html>
                 } else {
                     throw new Error(result.error || 'Nenhum grupo encontrado para esta instância');
                 }
-                
+
             } catch (error) {
+                if (error.message === 'Failed to fetch') {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">❌</div>
+                            <div class="empty-title">Erro ao carregar grupos</div>
+                            <p>Não foi possível conectar ao serviço Baileys (${BAILEYS_URL}). Verifique se ele está em execução.</p>
+                            <button class="btn btn-primary" onclick="loadInstanceGroups()">🔄 Tentar Novamente</button>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">❌</div>
+                            <div class="empty-title">Erro ao carregar grupos</div>
+                            <p>${error.message}</p>
+                            <button class="btn btn-primary" onclick="loadInstanceGroups()">🔄 Tentar Novamente</button>
+                        </div>
+                    `;
+                }
                 console.error('❌ Erro ao carregar grupos:', error);
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-icon">❌</div>
-                        <div class="empty-title">Erro ao carregar grupos</div>
-                        <p>${error.message}</p>
-                        <button class="btn btn-primary" onclick="loadInstanceGroups()">🔄 Tentar Novamente</button>
-                    </div>
-                `;
             }
         }
         
