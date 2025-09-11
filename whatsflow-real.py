@@ -2089,6 +2089,179 @@ HTML_APP = '''<!DOCTYPE html>
             </div>
         </div>
     </div>
+    
+    <!-- Campaign Modals -->
+    <div id="createCampaignModal" class="modal">
+        <div class="modal-content">
+            <h3>🎯 Nova Campanha</h3>
+            <form onsubmit="createCampaign(event)">
+                <div style="margin: 20px 0;">
+                    <input type="text" id="campaignName" class="form-input" 
+                           placeholder="Nome da campanha" required>
+                </div>
+                <div style="margin: 20px 0;">
+                    <textarea id="campaignDescription" class="form-input" 
+                              placeholder="Descrição da campanha (opcional)" 
+                              style="height: 80px; resize: vertical;"></textarea>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn" onclick="hideCreateCampaignModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-success" style="flex: 1;">Criar Campanha</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="editCampaignModal" class="modal">
+        <div class="modal-content">
+            <h3>✏️ Editar Campanha</h3>
+            <form onsubmit="updateCampaign(event)">
+                <input type="hidden" id="editCampaignId">
+                <div style="margin: 20px 0;">
+                    <input type="text" id="editCampaignName" class="form-input" 
+                           placeholder="Nome da campanha" required>
+                </div>
+                <div style="margin: 20px 0;">
+                    <textarea id="editCampaignDescription" class="form-input" 
+                              placeholder="Descrição da campanha (opcional)" 
+                              style="height: 80px; resize: vertical;"></textarea>
+                </div>
+                <div style="margin: 20px 0;">
+                    <select id="editCampaignStatus" class="form-input">
+                        <option value="active">🟢 Ativa</option>
+                        <option value="paused">⏸️ Pausada</option>
+                        <option value="completed">✅ Concluída</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn" onclick="hideEditCampaignModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-success" style="flex: 1;">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="selectGroupsModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3>👥 Selecionar Grupos para Campanha</h3>
+            <input type="hidden" id="selectGroupsCampaignId">
+            
+            <div style="margin: 20px 0;">
+                <select id="groupsInstanceSelect" onchange="loadInstanceGroups()" class="form-input">
+                    <option value="">Selecione uma instância</option>
+                </select>
+            </div>
+            
+            <div style="margin: 20px 0; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px;">
+                <div id="available-groups-list">
+                    <div class="empty-state">
+                        <p>Selecione uma instância para ver os grupos disponíveis</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <h4>Grupos Selecionados: <span id="selected-groups-count">0</span></h4>
+                <div id="selected-groups-list" style="max-height: 150px; overflow-y: auto;">
+                    <div class="empty-state">
+                        <p>Nenhum grupo selecionado</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn" onclick="hideSelectGroupsModal()">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="saveCampaignGroups()" style="flex: 1;">
+                    Salvar Seleção
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="scheduleModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h3>⏰ Agendar Mensagens</h3>
+            <input type="hidden" id="scheduleCampaignId">
+            
+            <div style="margin: 20px 0;">
+                <textarea id="scheduleMessageText" class="form-input" 
+                          placeholder="Digite a mensagem que será enviada..." 
+                          style="height: 100px; resize: vertical;" required></textarea>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Tipo de Agendamento:</label>
+                <select id="scheduleType" class="form-input" onchange="handleScheduleTypeChange()">
+                    <option value="once">📅 Envio Único</option>
+                    <option value="daily">🔄 Diário</option>
+                    <option value="weekly">📅 Semanal</option>
+                </select>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Horário:</label>
+                <input type="time" id="scheduleTime" class="form-input" required>
+            </div>
+            
+            <div id="scheduleDateDiv" style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Data:</label>
+                <input type="date" id="scheduleDate" class="form-input">
+            </div>
+            
+            <div id="scheduleDaysDiv" style="margin: 20px 0; display: none;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 500;">Dias da Semana:</label>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="monday" name="scheduleDays"> Segunda-feira
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="tuesday" name="scheduleDays"> Terça-feira
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="wednesday" name="scheduleDays"> Quarta-feira
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="thursday" name="scheduleDays"> Quinta-feira
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="friday" name="scheduleDays"> Sexta-feira
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="saturday" name="scheduleDays"> Sábado
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="sunday" name="scheduleDays"> Domingo
+                    </label>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn" onclick="hideScheduleModal()">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="createSchedule()" style="flex: 1;">
+                    📤 Agendar Mensagem
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="historyModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <h3>📊 Histórico de Mensagens</h3>
+            <input type="hidden" id="historyCampaignId">
+            
+            <div id="history-content" style="margin: 20px 0; max-height: 400px; overflow-y: auto;">
+                <div class="loading">
+                    <div style="text-align: center; padding: 2rem;">🔄 Carregando histórico...</div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn btn-primary" onclick="hideHistoryModal()" style="flex: 1;">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script>
         let instances = [];
