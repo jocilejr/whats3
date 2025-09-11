@@ -1968,11 +1968,28 @@ HTML_APP = '''<!DOCTYPE html>
             </div>
         </div>
         
-        <!-- Groups Section - Nova funcionalidade -->
+        <!-- Groups Section - Sistema de Campanhas -->
         <div id="groups" class="section">
+            <!-- Campaigns Section -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h2>🎯 Campanhas de Marketing</h2>
+                    <button class="btn btn-primary" onclick="showCreateCampaignModal()">
+                        ➕ Criar Campanha
+                    </button>
+                </div>
+                
+                <div id="campaigns-container">
+                    <div class="loading">
+                        <div style="text-align: center; padding: 2rem;">🔄 Carregando campanhas...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Groups Management Section -->
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h2>Gerenciar Grupos WhatsApp</h2>
+                    <h2>👥 Grupos WhatsApp Disponíveis</h2>
                     <div>
                         <select id="groupInstanceSelect" onchange="loadGroupsFromInstance()" style="margin-right: 10px;">
                             <option value="">Selecione uma instância</option>
@@ -1992,29 +2009,6 @@ HTML_APP = '''<!DOCTYPE html>
                             <div class="empty-icon">👥</div>
                             <div class="empty-title">Nenhum grupo encontrado</div>
                             <p>Selecione uma instância conectada para carregar os grupos do WhatsApp</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Schedule Messages Panel -->  
-                <div class="schedule-panel" style="margin-top: 2rem;">
-                    <h3>📅 Agendamento de Mensagens</h3>
-                    <div class="schedule-form">
-                        <div class="form-row">
-                            <select id="scheduleGroupSelect" style="flex: 1; margin-right: 10px;">
-                                <option value="">Selecione um grupo</option>
-                            </select>
-                            <input type="datetime-local" id="scheduleDateTime" style="flex: 1; margin-right: 10px;">
-                            <button class="btn btn-success" onclick="scheduleMessage()">📤 Agendar</button>
-                        </div>
-                        <textarea id="scheduleMessage" placeholder="Digite a mensagem para agendar..." 
-                                 style="width: 100%; margin-top: 10px; height: 80px;"></textarea>
-                    </div>
-                    
-                    <div class="scheduled-messages" id="scheduledMessages">
-                        <h4>Mensagens Agendadas</h4>
-                        <div class="empty-state">
-                            <p>Nenhuma mensagem agendada</p>
                         </div>
                     </div>
                 </div>
