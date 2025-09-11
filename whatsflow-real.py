@@ -4678,6 +4678,14 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         if self.path.startswith('/api/instances/'):
             instance_id = self.path.split('/')[-1]
             self.handle_delete_instance(instance_id)
+        elif self.path.startswith('/api/campaigns/') and '/groups/' in self.path:
+            path_parts = self.path.split('/')
+            campaign_id = path_parts[3]
+            group_id = path_parts[5]
+            self.handle_delete_campaign_group(campaign_id, group_id)
+        elif self.path.startswith('/api/campaigns/'):
+            campaign_id = self.path.split('/')[-1]
+            self.handle_delete_campaign(campaign_id)
         elif self.path.startswith('/api/flows/'):
             flow_id = self.path.split('/')[-1]
             self.handle_delete_flow(flow_id)
