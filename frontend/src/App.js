@@ -7,6 +7,7 @@ import MessagesCenter from './components/MessagesCenter';
 import WhatsAppInstances from './components/WhatsAppInstances';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BAILEYS_URL = process.env.REACT_APP_BAILEYS_URL;
 const API = `${BACKEND_URL}/api`;
 
 // QR Code Component
@@ -341,6 +342,20 @@ function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [showFlowEditor, setShowFlowEditor] = useState(false);
   const [editingFlow, setEditingFlow] = useState(null);
+  const [baileysHealthy, setBaileysHealthy] = useState(false);
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const r = await fetch(`${BAILEYS_URL}/health`);
+        if (!r.ok) throw new Error();
+        setBaileysHealthy(true);
+      } catch {
+        alert(`Serviço Baileys indisponível em ${BAILEYS_URL}`);
+      }
+    };
+    checkHealth();
+  }, []);
 
   const handleCreateFlow = () => {
     setEditingFlow(null);
@@ -417,7 +432,7 @@ function App() {
           )}
 
           {currentView === 'messages' && (
-            <MessagesCenter />
+            <MessagesCenter baileysHealthy={baileysHealthy} />
           )}
 
           {currentView === 'instances' && (

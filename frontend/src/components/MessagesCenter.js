@@ -4,7 +4,7 @@ import axios from 'axios';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-export default function MessagesCenter() {
+export default function MessagesCenter({ baileysHealthy }) {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -213,6 +213,7 @@ export default function MessagesCenter() {
               value={selectedDevice}
               onChange={(e) => setSelectedDevice(e.target.value)}
               className="device-select"
+              disabled={!baileysHealthy}
             >
               {devices.map(device => (
                 <option key={device.device_id} value={device.device_id}>
