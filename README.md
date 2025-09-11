@@ -1,12 +1,16 @@
 # Here are your Instructions
 
-## Configuração da URL do Baileys
+ codex/replace-origin-configuration-with-allowed_origins
+## Configuração do `ALLOWED_ORIGINS`
 
-Para utilizar um serviço Baileys externo em produção, defina a variável de ambiente `BAILEYS_URL` antes de iniciar o servidor:
+O serviço `baileys_service` permite definir origens autorizadas para requisições CORS através da variável de ambiente `ALLOWED_ORIGINS`.
+
+- Para especificar origens, defina `ALLOWED_ORIGINS` como uma lista separada por vírgulas:
 
 ```bash
-export BAILEYS_URL="http://seu-servidor-baileys:3002"
-python3 whatsflow-real.py
+export ALLOWED_ORIGINS="http://localhost:3000,http://example.com"
+node baileys_service/server.js
 ```
 
-Se a variável não for informada, o endereço padrão será construído a partir de `window.location.hostname` usando a porta `3002`.
+- Se `ALLOWED_ORIGINS` não for definida, todas as origens serão aceitas.
+
