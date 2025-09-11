@@ -4439,7 +4439,7 @@ HTML_APP = '''<!DOCTYPE html>
             try {
                 container.innerHTML = '<div class="loading"><div style="text-align: center; padding: 1rem;">🔄 Carregando grupos...</div></div>';
 
- codex/handle-fetch-error-in-loadinstancegroups
+            // codex/handle-fetch-error-in-loadinstancegroups
 
                 const response = await fetch(`${BAILEYS_URL}/groups/${instanceId}`);
                 const result = await response.json();
