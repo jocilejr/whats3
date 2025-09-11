@@ -3725,9 +3725,65 @@ def init_db():
         )
     """)
     
+    # Campaigns system tables
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'active', -- active, paused, completed
+            instance_id TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS campaign_groups (
+            id TEXT PRIMARY KEY,
+            campaign_id TEXT NOT NULL,
+            group_id TEXT NOT NULL,
+            group_name TEXT NOT NULL,
+            instance_id TEXT NOT NULL,
+            created_at TEXT,
+            FOREIGN KEY (campaign_id) REFERENCES campaigns (id) ON DELETE CASCADE
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scheduled_messages (
+            id TEXT PRIMARY KEY,
+            campaign_id TEXT NOT NULL,
+            message_text TEXT NOT NULL,
+            schedule_type TEXT NOT NULL, -- daily, weekly, once
+            schedule_time TEXT NOT NULL, -- HH:MM format
+            schedule_days TEXT, -- JSON array for weekly: ["monday", "tuesday"] or null for daily/once
+            schedule_date TEXT, -- YYYY-MM-DD for 'once' type
+            is_active INTEGER DEFAULT 1,
+            next_run TEXT, -- Next execution datetime
+            created_at TEXT,
+            FOREIGN KEY (campaign_id) REFERENCES campaigns (id) ON DELETE CASCADE
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS message_history (
+            id TEXT PRIMARY KEY,
+            campaign_id TEXT NOT NULL,
+            group_id TEXT NOT NULL,
+            group_name TEXT NOT NULL,
+            message_text TEXT NOT NULL,
+            sent_at TEXT NOT NULL,
+            status TEXT NOT NULL, -- sent, failed, pending
+            error_message TEXT,
+            instance_id TEXT,
+            FOREIGN KEY (campaign_id) REFERENCES campaigns (id) ON DELETE CASCADE
+        )
+    """)
+    
     conn.commit()
     conn.close()
-    print("✅ Banco de dados inicializado com suporte WebSocket")
+    print("✅ Banco de dados inicializado com suporte para Campanhas e WebSocket")
 
 # WebSocket Server Functions
 if WEBSOCKETS_AVAILABLE:
