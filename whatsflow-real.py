@@ -5635,6 +5635,454 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Erro ao enviar webhook: {e}")
             self.send_json_response({"error": str(e)}, 500)
+
+    # Campaign Management Functions
+    def handle_get_campaigns(self):
+        """Get all campaigns"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT c.*, 
+                       COUNT(cg.id) as groups_count,
+                       COUNT(sm.id) as schedules_count
+                FROM campaigns c
+                LEFT JOIN campaign_groups cg ON c.id = cg.campaign_id
+                LEFT JOIN scheduled_messages sm ON c.id = sm.campaign_id AND sm.is_active = 1
+                GROUP BY c.id
+                ORDER BY c.created_at DESC
+            """)
+            
+            campaigns = []
+            for row in cursor.fetchall():
+                campaigns.append({
+                    'id': row[0],
+                    'name': row[1],
+                    'description': row[2],
+                    'status': row[3],
+                    'instance_id': row[4],
+                    'created_at': row[5],
+                    'updated_at': row[6],
+                    'groups_count': row[7],
+                    'schedules_count': row[8]
+                })
+            
+            conn.close()
+            self.send_json_response(campaigns)
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter campanhas: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_get_campaign(self, campaign_id):
+        """Get single campaign by ID"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT * FROM campaigns WHERE id = ?
+            """, (campaign_id,))
+            
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                self.send_json_response({"error": "Campanha não encontrada"}, 404)
+                return
+            
+            campaign = {
+                'id': row[0],
+                'name': row[1],
+                'description': row[2],
+                'status': row[3],
+                'instance_id': row[4],
+                'created_at': row[5],
+                'updated_at': row[6]
+            }
+            
+            conn.close()
+            self.send_json_response(campaign)
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_create_campaign(self):
+        """Create new campaign"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            campaign_id = str(uuid.uuid4())
+            
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO campaigns (id, name, description, status, instance_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (campaign_id, data['name'], data.get('description', ''), 
+                  data.get('status', 'active'), data.get('instance_id'),
+                  datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat()))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"✅ Campanha criada: {data['name']}")
+            self.send_json_response({
+                'success': True, 
+                'campaign_id': campaign_id,
+                'message': 'Campanha criada com sucesso'
+            })
+            
+        except Exception as e:
+            print(f"❌ Erro ao criar campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_update_campaign(self, campaign_id):
+        """Update campaign"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            update_fields = []
+            values = []
+            
+            if 'name' in data:
+                update_fields.append('name = ?')
+                values.append(data['name'])
+            if 'description' in data:
+                update_fields.append('description = ?')
+                values.append(data['description'])
+            if 'status' in data:
+                update_fields.append('status = ?')
+                values.append(data['status'])
+            if 'instance_id' in data:
+                update_fields.append('instance_id = ?')
+                values.append(data['instance_id'])
+            
+            if update_fields:
+                update_fields.append('updated_at = ?')
+                values.append(datetime.now(timezone.utc).isoformat())
+                
+                values.append(campaign_id)
+                
+                cursor.execute(f"""
+                    UPDATE campaigns 
+                    SET {', '.join(update_fields)}
+                    WHERE id = ?
+                """, values)
+                
+                if cursor.rowcount > 0:
+                    conn.commit()
+                    conn.close()
+                    print(f"✅ Campanha {campaign_id} atualizada")
+                    self.send_json_response({'success': True, 'message': 'Campanha atualizada com sucesso'})
+                else:
+                    conn.close()
+                    self.send_json_response({'error': 'Campanha não encontrada'}, 404)
+            else:
+                conn.close()
+                self.send_json_response({'error': 'Nenhum campo para atualizar'}, 400)
+            
+        except Exception as e:
+            print(f"❌ Erro ao atualizar campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_delete_campaign(self, campaign_id):
+        """Delete campaign"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            # Delete related records (CASCADE will handle this, but being explicit)
+            cursor.execute("DELETE FROM message_history WHERE campaign_id = ?", (campaign_id,))
+            cursor.execute("DELETE FROM scheduled_messages WHERE campaign_id = ?", (campaign_id,))
+            cursor.execute("DELETE FROM campaign_groups WHERE campaign_id = ?", (campaign_id,))
+            cursor.execute("DELETE FROM campaigns WHERE id = ?", (campaign_id,))
+            
+            if cursor.rowcount > 0:
+                conn.commit()
+                conn.close()
+                print(f"✅ Campanha {campaign_id} excluída")
+                self.send_json_response({'success': True, 'message': 'Campanha excluída com sucesso'})
+            else:
+                conn.close()
+                self.send_json_response({'error': 'Campanha não encontrada'}, 404)
+            
+        except Exception as e:
+            print(f"❌ Erro ao excluir campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_get_campaign_groups(self, campaign_id):
+        """Get groups for a campaign"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT * FROM campaign_groups 
+                WHERE campaign_id = ?
+                ORDER BY created_at ASC
+            """, (campaign_id,))
+            
+            groups = []
+            for row in cursor.fetchall():
+                groups.append({
+                    'id': row[0],
+                    'campaign_id': row[1],
+                    'group_id': row[2],
+                    'group_name': row[3],
+                    'instance_id': row[4],
+                    'created_at': row[5]
+                })
+            
+            conn.close()
+            self.send_json_response(groups)
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter grupos da campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_add_campaign_groups(self, campaign_id):
+        """Add groups to campaign"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            groups = data.get('groups', [])
+            if not groups:
+                self.send_json_response({"error": "Nenhum grupo fornecido"}, 400)
+                return
+            
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            # Remove existing groups for this campaign (replace)
+            cursor.execute("DELETE FROM campaign_groups WHERE campaign_id = ?", (campaign_id,))
+            
+            # Add new groups
+            for group in groups:
+                group_id = str(uuid.uuid4())
+                cursor.execute("""
+                    INSERT INTO campaign_groups (id, campaign_id, group_id, group_name, instance_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (group_id, campaign_id, group['group_id'], group['group_name'], 
+                      group['instance_id'], datetime.now(timezone.utc).isoformat()))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"✅ {len(groups)} grupos adicionados à campanha {campaign_id}")
+            self.send_json_response({
+                'success': True, 
+                'message': f'{len(groups)} grupos adicionados com sucesso'
+            })
+            
+        except Exception as e:
+            print(f"❌ Erro ao adicionar grupos à campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_delete_campaign_group(self, campaign_id, group_id):
+        """Remove group from campaign"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                DELETE FROM campaign_groups 
+                WHERE campaign_id = ? AND id = ?
+            """, (campaign_id, group_id))
+            
+            if cursor.rowcount > 0:
+                conn.commit()
+                conn.close()
+                print(f"✅ Grupo removido da campanha {campaign_id}")
+                self.send_json_response({'success': True, 'message': 'Grupo removido com sucesso'})
+            else:
+                conn.close()
+                self.send_json_response({'error': 'Grupo não encontrado na campanha'}, 404)
+            
+        except Exception as e:
+            print(f"❌ Erro ao remover grupo da campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_get_campaign_schedule(self, campaign_id):
+        """Get schedule for a campaign"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT * FROM scheduled_messages 
+                WHERE campaign_id = ?
+                ORDER BY created_at DESC
+            """, (campaign_id,))
+            
+            schedules = []
+            for row in cursor.fetchall():
+                schedules.append({
+                    'id': row[0],
+                    'campaign_id': row[1],
+                    'message_text': row[2],
+                    'schedule_type': row[3],
+                    'schedule_time': row[4],
+                    'schedule_days': json.loads(row[5]) if row[5] else None,
+                    'schedule_date': row[6],
+                    'is_active': bool(row[7]),
+                    'next_run': row[8],
+                    'created_at': row[9]
+                })
+            
+            conn.close()
+            self.send_json_response(schedules)
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter agendamentos da campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_create_campaign_schedule(self, campaign_id):
+        """Create schedule for campaign"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            schedule_id = str(uuid.uuid4())
+            
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            # Calculate next_run based on schedule_type
+            next_run = self.calculate_next_run(
+                data['schedule_type'], 
+                data['schedule_time'], 
+                data.get('schedule_days'), 
+                data.get('schedule_date')
+            )
+            
+            cursor.execute("""
+                INSERT INTO scheduled_messages 
+                (id, campaign_id, message_text, schedule_type, schedule_time, schedule_days, 
+                 schedule_date, is_active, next_run, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (schedule_id, campaign_id, data['message_text'], data['schedule_type'],
+                  data['schedule_time'], json.dumps(data.get('schedule_days')),
+                  data.get('schedule_date'), data.get('is_active', True),
+                  next_run, datetime.now(timezone.utc).isoformat()))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"✅ Agendamento criado para campanha {campaign_id}")
+            self.send_json_response({
+                'success': True, 
+                'schedule_id': schedule_id,
+                'next_run': next_run,
+                'message': 'Agendamento criado com sucesso'
+            })
+            
+        except Exception as e:
+            print(f"❌ Erro ao criar agendamento: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_get_campaign_history(self, campaign_id):
+        """Get message history for a campaign"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT * FROM message_history 
+                WHERE campaign_id = ?
+                ORDER BY sent_at DESC
+                LIMIT 100
+            """, (campaign_id,))
+            
+            history = []
+            for row in cursor.fetchall():
+                history.append({
+                    'id': row[0],
+                    'campaign_id': row[1],
+                    'group_id': row[2],
+                    'group_name': row[3],
+                    'message_text': row[4],
+                    'sent_at': row[5],
+                    'status': row[6],
+                    'error_message': row[7],
+                    'instance_id': row[8]
+                })
+            
+            conn.close()
+            self.send_json_response(history)
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter histórico da campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def calculate_next_run(self, schedule_type, schedule_time, schedule_days=None, schedule_date=None):
+        """Calculate next execution time for scheduled message"""
+        try:
+            from datetime import datetime, timedelta
+            import time
+            
+            now = datetime.now()
+            hour, minute = map(int, schedule_time.split(':'))
+            
+            if schedule_type == 'once':
+                if schedule_date:
+                    target_date = datetime.strptime(schedule_date, '%Y-%m-%d')
+                    target_datetime = target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_datetime > now:
+                        return target_datetime.isoformat()
+                return None
+            
+            elif schedule_type == 'daily':
+                next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                if next_run <= now:
+                    next_run += timedelta(days=1)
+                return next_run.isoformat()
+            
+            elif schedule_type == 'weekly':
+                if not schedule_days:
+                    return None
+                
+                weekdays = {
+                    'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+                    'friday': 4, 'saturday': 5, 'sunday': 6
+                }
+                
+                current_weekday = now.weekday()
+                target_weekdays = [weekdays[day.lower()] for day in schedule_days if day.lower() in weekdays]
+                
+                if not target_weekdays:
+                    return None
+                
+                # Find next occurrence
+                for i in range(7):
+                    check_date = now + timedelta(days=i)
+                    if check_date.weekday() in target_weekdays:
+                        next_run = check_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                        if next_run > now:
+                            return next_run.isoformat()
+                
+                # Fallback to next week
+                next_run = now + timedelta(days=7)
+                next_run = next_run.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                return next_run.isoformat()
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Erro ao calcular próxima execução: {e}")
+            return None
     
     def log_message(self, format, *args):
         # Suppress default logging
