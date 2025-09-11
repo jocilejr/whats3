@@ -4668,6 +4668,9 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         if self.path.startswith('/api/flows/'):
             flow_id = self.path.split('/')[-1]
             self.handle_update_flow(flow_id)
+        elif self.path.startswith('/api/campaigns/'):
+            campaign_id = self.path.split('/')[-1]
+            self.handle_update_campaign(campaign_id)
         else:
             self.send_error(404, "Not Found")
     
