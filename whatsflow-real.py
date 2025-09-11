@@ -4651,6 +4651,14 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_send_message(instance_id)
         elif self.path == '/api/flows':
             self.handle_create_flow()
+        elif self.path == '/api/campaigns':
+            self.handle_create_campaign()
+        elif self.path.startswith('/api/campaigns/') and '/groups' in self.path:
+            campaign_id = self.path.split('/')[3]
+            self.handle_add_campaign_groups(campaign_id)
+        elif self.path.startswith('/api/campaigns/') and '/schedule' in self.path:
+            campaign_id = self.path.split('/')[3]
+            self.handle_create_campaign_schedule(campaign_id)
         elif self.path == '/api/webhooks/send':
             self.handle_send_webhook()
         else:
