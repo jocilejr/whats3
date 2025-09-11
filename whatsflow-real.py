@@ -4426,6 +4426,11 @@ HTML_APP = '''<!DOCTYPE html>
         }
         
         async function loadInstanceGroups() {
+            // Se o frontend e o serviço Baileys estiverem em máquinas diferentes,
+            // defina window.BAILEYS_URL antes de chamar loadInstanceGroups.
+            const BAILEYS_URL =
+                window.BAILEYS_URL || `http://${window.location.hostname}:3002`;
+
             const instanceId = document.getElementById('groupsInstanceSelect').value;
             const container = document.getElementById('available-groups-list');
 
@@ -4433,9 +4438,6 @@ HTML_APP = '''<!DOCTYPE html>
                 container.innerHTML = '<div class="empty-state"><p>Selecione uma instância para ver os grupos disponíveis</p></div>';
                 return;
             }
-
-            // window.BAILEYS_URL pode ser definido antes do script para apontar para outro host/porta
-            const BAILEYS_URL = window.BAILEYS_URL || `http://${window.location.hostname}:3002`;
 
             try {
                 container.innerHTML = '<div class="loading"><div style="text-align: center; padding: 1rem;">🔄 Carregando grupos...</div></div>';
