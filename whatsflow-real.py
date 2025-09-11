@@ -4581,6 +4581,27 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_get_chats()
         elif self.path == '/api/flows':
             self.handle_get_flows()
+        elif self.path == '/api/campaigns':
+            self.handle_get_campaigns()
+        elif self.path.startswith('/api/campaigns/') and '/groups' in self.path:
+            # Handle campaign groups routes
+            path_parts = self.path.split('/')
+            campaign_id = path_parts[3]
+            if self.path.endswith('/groups'):
+                self.handle_get_campaign_groups(campaign_id)
+            else:
+                # Specific group handling
+                group_id = path_parts[5]
+                self.handle_delete_campaign_group(campaign_id, group_id)
+        elif self.path.startswith('/api/campaigns/') and '/schedule' in self.path:
+            campaign_id = self.path.split('/')[3]
+            self.handle_get_campaign_schedule(campaign_id)
+        elif self.path.startswith('/api/campaigns/') and '/history' in self.path:
+            campaign_id = self.path.split('/')[3]
+            self.handle_get_campaign_history(campaign_id)
+        elif self.path.startswith('/api/campaigns/'):
+            campaign_id = self.path.split('/')[-1]
+            self.handle_get_campaign(campaign_id)
         elif self.path == '/api/webhooks/send':
             self.handle_send_webhook()
         elif self.path.startswith('/api/whatsapp/status/'):
