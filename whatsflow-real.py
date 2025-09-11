@@ -4434,7 +4434,8 @@ HTML_APP = '''<!DOCTYPE html>
                 return;
             }
 
-            const BAILEYS_URL = window.BAILEYS_URL || `${window.location.protocol}//${window.location.hostname}:3002`;
+            // window.BAILEYS_URL pode ser definido antes do script para apontar para outro host/porta
+            const BAILEYS_URL = window.BAILEYS_URL || `http://${window.location.hostname}:3002`;
 
             try {
                 container.innerHTML = '<div class="loading"><div style="text-align: center; padding: 1rem;">🔄 Carregando grupos...</div></div>';
