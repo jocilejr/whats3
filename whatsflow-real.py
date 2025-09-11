@@ -4436,8 +4436,9 @@ HTML_APP = '''<!DOCTYPE html>
             
             try {
                 container.innerHTML = '<div class="loading"><div style="text-align: center; padding: 1rem;">🔄 Carregando grupos...</div></div>';
-                
-                const response = await fetch(`http://127.0.0.1:3002/groups/${instanceId}`);
+
+                const BAILEYS_URL = window.BAILEYS_URL || `${window.location.protocol}//${window.location.hostname}:3002`;
+                const response = await fetch(`${BAILEYS_URL}/groups/${instanceId}`);
                 const result = await response.json();
                 
                 if (response.ok && result.success && result.groups) {
@@ -4854,6 +4855,14 @@ HTML_APP = '''<!DOCTYPE html>
     </script>
 </body>
 </html>'''
+
+# Inject Baileys URL from environment into frontend
+BAILEYS_ENV_URL = os.environ.get("BAILEYS_URL", "")
+HTML_APP = HTML_APP.replace(
+    "<body>",
+    f"<body><script>window.BAILEYS_URL = {json.dumps(BAILEYS_ENV_URL)};</script>",
+    1,
+)
 
 # Database setup (same as before but with WebSocket integration)
 def init_db():

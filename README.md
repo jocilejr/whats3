@@ -1,5 +1,6 @@
 # Here are your Instructions
 
+ codex/replace-origin-configuration-with-allowed_origins
 ## Configuração do `ALLOWED_ORIGINS`
 
 O serviço `baileys_service` permite definir origens autorizadas para requisições CORS através da variável de ambiente `ALLOWED_ORIGINS`.
@@ -12,3 +13,4 @@ node baileys_service/server.js
 ```
 
 - Se `ALLOWED_ORIGINS` não for definida, todas as origens serão aceitas.
+
