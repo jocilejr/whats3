@@ -7,8 +7,14 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
+
+// Configure CORS based on ALLOWED_ORIGINS env variable. If not provided, allow all origins.
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+    : true;
+
 app.use(cors({
-    origin: ['http://localhost:8889', 'http://127.0.0.1:8889', 'http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
