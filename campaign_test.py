@@ -567,6 +567,10 @@ class CampaignTester:
             time.sleep(0.5)  # Small delay between tests
         
         self.print_summary()
+        
+        # Return success status
+        success_rate = (len(self.passed_tests) / len(self.test_results) * 100) if self.test_results else 0
+        return success_rate >= 80
 
     def print_summary(self):
         """Print test summary"""
