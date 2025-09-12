@@ -2487,8 +2487,8 @@ HTML_APP = '''<!DOCTYPE html>
         
         <!-- Groups Section - Sistema de Campanhas -->
         <div id="groups" class="section">
-            <!-- Campaigns Section -->
-            <div class="card" style="margin-bottom: 2rem;">
+            <!-- Campaigns Section - OCULTA (projeto anterior) -->
+            <div class="card" style="margin-bottom: 2rem; display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                     <h2>🎯 Campanhas de Marketing</h2>
                     <button class="btn btn-primary" onclick="showCreateCampaignModal()">
