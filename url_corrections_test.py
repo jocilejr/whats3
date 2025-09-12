@@ -422,7 +422,7 @@ class URLCorrectionsValidator:
             ("GET /api/campaigns (5 campaigns)", self.test_campaigns_api_get),
             ("POST /api/campaigns (create)", self.test_create_campaign),
             ("Dynamic URL Configuration", self.test_dynamic_url_configuration),
-            ("External IP Access", self.test_external_ip_access),
+            ("External IP Configuration", self.test_external_ip_configuration),
             ("CRUD Operations", self.test_crud_operations)
         ]
         
