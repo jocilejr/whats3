@@ -8230,6 +8230,247 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Erro ao calcular próxima execução: {e}")
             return None
+
+    # ===== SCHEDULED MESSAGES HANDLERS =====
+    
+    def handle_get_scheduled_messages(self):
+        """Get all scheduled messages"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT * FROM scheduled_messages 
+                ORDER BY created_at DESC
+            """)
+            
+            messages = []
+            for row in cursor.fetchall():
+                messages.append({
+                    'id': row[0],
+                    'campaign_id': row[1],
+                    'group_id': row[2] if len(row) > 2 else None,
+                    'group_name': row[3] if len(row) > 3 else None,
+                    'instance_id': row[4] if len(row) > 4 else None,
+                    'message_text': row[5] if len(row) > 5 else row[2],  # Compatibility
+                    'message_type': row[6] if len(row) > 6 else 'text',
+                    'media_url': row[7] if len(row) > 7 else None,
+                    'schedule_type': row[8] if len(row) > 8 else row[3],  # Compatibility
+                    'schedule_time': row[9] if len(row) > 9 else row[4],  # Compatibility
+                    'schedule_days': row[10] if len(row) > 10 else row[5],  # Compatibility
+                    'schedule_date': row[11] if len(row) > 11 else row[6],  # Compatibility
+                    'is_active': row[12] if len(row) > 12 else row[7],  # Compatibility
+                    'next_run': row[13] if len(row) > 13 else row[8],  # Compatibility
+                    'created_at': row[14] if len(row) > 14 else row[9]  # Compatibility
+                })
+            
+            conn.close()
+            self.send_json_response(messages)
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter mensagens agendadas: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+    
+    def handle_create_scheduled_message(self):
+        """Create new scheduled message"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            # Required fields
+            group_id = data.get('group_id')
+            group_name = data.get('group_name')
+            instance_id = data.get('instance_id')
+            schedule_type = data.get('schedule_type')
+            schedule_time = data.get('schedule_time')
+            
+            # Optional fields
+            message_text = data.get('message_text', '')
+            message_type = data.get('message_type', 'text')
+            media_url = data.get('media_url', '')
+            schedule_date = data.get('schedule_date')
+            schedule_days = data.get('schedule_days', [])
+            
+            if not all([group_id, group_name, instance_id, schedule_type, schedule_time]):
+                self.send_json_response({"error": "Campos obrigatórios faltando"}, 400)
+                return
+            
+            # Calculate next run using Brazil timezone
+            from datetime import datetime
+            import pytz
+            
+            brazil_tz = pytz.timezone('America/Sao_Paulo')
+            now_brazil = datetime.now(brazil_tz)
+            
+            # Parse schedule time
+            hour, minute = map(int, schedule_time.split(':'))
+            
+            if schedule_type == 'once':
+                if not schedule_date:
+                    self.send_json_response({"error": "Data é obrigatória para envio único"}, 400)
+                    return
+                    
+                target_date = datetime.strptime(schedule_date, '%Y-%m-%d')
+                target_datetime = brazil_tz.localize(target_date.replace(hour=hour, minute=minute, second=0))
+                
+                if target_datetime <= now_brazil:
+                    self.send_json_response({"error": "Data/horário deve ser no futuro"}, 400)
+                    return
+                    
+                next_run = target_datetime.isoformat()
+                
+            elif schedule_type == 'weekly':
+                if not schedule_days or len(schedule_days) == 0:
+                    self.send_json_response({"error": "Pelo menos um dia da semana é obrigatório"}, 400)
+                    return
+                    
+                # Calculate next weekly occurrence
+                weekdays = {
+                    'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+                    'friday': 4, 'saturday': 5, 'sunday': 6
+                }
+                
+                target_weekdays = [weekdays[day] for day in schedule_days if day in weekdays]
+                if not target_weekdays:
+                    self.send_json_response({"error": "Dias da semana inválidos"}, 400)
+                    return
+                
+                # Find next occurrence
+                next_run = None
+                for i in range(7):
+                    check_date = now_brazil + timedelta(days=i)
+                    if check_date.weekday() in target_weekdays:
+                        next_datetime = check_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                        if next_datetime > now_brazil:
+                            next_run = next_datetime.isoformat()
+                            break
+                
+                if not next_run:
+                    # Fallback to next week
+                    next_datetime = now_brazil + timedelta(days=7)
+                    next_datetime = next_datetime.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    next_run = next_datetime.isoformat()
+            else:
+                self.send_json_response({"error": "Tipo de agendamento inválido"}, 400)
+                return
+            
+            # Create scheduled message
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            message_id = str(uuid.uuid4())
+            created_at = datetime.now().isoformat()
+            
+            cursor.execute("""
+                INSERT INTO scheduled_messages 
+                (id, campaign_id, message_text, message_type, media_url, 
+                 schedule_type, schedule_time, schedule_days, schedule_date, 
+                 is_active, next_run, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                message_id, f"{group_id}_{instance_id}", message_text, message_type, media_url,
+                schedule_type, schedule_time, json.dumps(schedule_days), schedule_date,
+                1, next_run, created_at
+            ))
+            
+            # Store group and instance info in separate table for easier querying
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS scheduled_message_groups (
+                    message_id TEXT,
+                    group_id TEXT,
+                    group_name TEXT,
+                    instance_id TEXT,
+                    PRIMARY KEY (message_id, group_id)
+                )
+            """)
+            
+            cursor.execute("""
+                INSERT OR REPLACE INTO scheduled_message_groups 
+                (message_id, group_id, group_name, instance_id)
+                VALUES (?, ?, ?, ?)
+            """, (message_id, group_id, group_name, instance_id))
+            
+            conn.commit()
+            conn.close()
+            
+            self.send_json_response({
+                "success": True,
+                "message_id": message_id,
+                "next_run": next_run,
+                "message": "Mensagem agendada com sucesso!"
+            })
+            
+            print(f"✅ Mensagem agendada criada: {message_id} para grupo {group_name}")
+            
+        except Exception as e:
+            print(f"❌ Erro ao criar mensagem agendada: {e}")
+            import traceback
+            traceback.print_exc()
+            self.send_json_response({"error": str(e)}, 500)
+    
+    def handle_update_scheduled_message(self, message_id):
+        """Update scheduled message (toggle active/inactive)"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            is_active = data.get('is_active', True)
+            
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                UPDATE scheduled_messages 
+                SET is_active = ?
+                WHERE id = ?
+            """, (1 if is_active else 0, message_id))
+            
+            if cursor.rowcount == 0:
+                self.send_json_response({"error": "Mensagem não encontrada"}, 404)
+                return
+            
+            conn.commit()
+            conn.close()
+            
+            self.send_json_response({
+                "success": True,
+                "message": f"Mensagem {'ativada' if is_active else 'desativada'} com sucesso!"
+            })
+            
+            print(f"✅ Mensagem {message_id} {'ativada' if is_active else 'desativada'}")
+            
+        except Exception as e:
+            print(f"❌ Erro ao atualizar mensagem agendada: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+    
+    def handle_delete_scheduled_message(self, message_id):
+        """Delete scheduled message"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("DELETE FROM scheduled_messages WHERE id = ?", (message_id,))
+            cursor.execute("DELETE FROM scheduled_message_groups WHERE message_id = ?", (message_id,))
+            
+            if cursor.rowcount == 0:
+                self.send_json_response({"error": "Mensagem não encontrada"}, 404)
+                return
+            
+            conn.commit() 
+            conn.close()
+            
+            self.send_json_response({
+                "success": True,
+                "message": "Mensagem agendada excluída com sucesso!"
+            })
+            
+            print(f"✅ Mensagem agendada excluída: {message_id}")
+            
+        except Exception as e:
+            print(f"❌ Erro ao excluir mensagem agendada: {e}")
+            self.send_json_response({"error": str(e)}, 500)
     
     def log_message(self, format, *args):
         # Suppress default logging
