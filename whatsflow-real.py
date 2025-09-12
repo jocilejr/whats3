@@ -6522,7 +6522,7 @@ HTML_APP = '''<!DOCTYPE html>
             }
             
             try {
-                const response = await fetch(`/api/campaigns/${campaignId}`, {
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${campaignId}`, {
                     method: 'DELETE'
                 });
                 
