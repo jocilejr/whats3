@@ -6038,6 +6038,7 @@ HTML_APP = '''<!DOCTYPE html>
         // Campaign Management Functions
         let currentCampaignId = null;
         let selectedCampaignGroups = [];
+        const WHATSFLOW_API_URL = window.WHATSFLOW_API_URL || window.location.origin;
         
         // Show create campaign modal
         function showCreateCampaignModal() {
