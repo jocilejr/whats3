@@ -3013,6 +3013,112 @@ HTML_APP = '''<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Create Campaign Modal -->
+    <div id="createCampaignModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h3>🎯 Nova Campanha</h3>
+            
+            <div style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nome da Campanha:</label>
+                <input type="text" id="campaignName" class="form-input" 
+                       placeholder="Ex: Promoção Black Friday" required>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Descrição (opcional):</label>
+                <textarea id="campaignDescription" class="form-input" 
+                          placeholder="Descreva o objetivo desta campanha..." 
+                          style="height: 80px; resize: vertical;"></textarea>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Selecionar Instâncias:</label>
+                <div id="campaignInstancesList" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
+                    <!-- Instances will be loaded here -->
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn" onclick="hideCreateCampaignModal()">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="createCampaign()" style="flex: 1;">
+                    🎯 Criar Campanha
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Manage Campaign Modal -->
+    <div id="manageCampaignModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 id="manageCampaignTitle">🎯 Gerenciar Campanha</h3>
+                <button onclick="hideCampaignModal()" style="background: none; border: none; font-size: 20px; cursor: pointer;">&times;</button>
+            </div>
+            
+            <!-- Campaign Navigation -->
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #ddd; padding-bottom: 15px;">
+                <button class="btn btn-secondary campaign-nav-btn active" onclick="showCampaignTab('groups')" id="groupsTab">
+                    👥 Grupos
+                </button>
+                <button class="btn btn-secondary campaign-nav-btn" onclick="showCampaignTab('schedule')" id="scheduleTab">
+                    ⏰ Programar
+                </button>
+                <button class="btn btn-secondary campaign-nav-btn" onclick="showCampaignTab('view')" id="viewTab">
+                    📋 Ver Programações
+                </button>
+            </div>
+            
+            <!-- Groups Tab -->
+            <div id="campaignGroupsTab" class="campaign-tab active">
+                <div style="margin-bottom: 15px;">
+                    <h4>Grupos Selecionados</h4>
+                    <div id="selectedCampaignGroups" style="min-height: 100px; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
+                        <div class="empty-state">
+                            <p>Nenhum grupo selecionado ainda</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                        <h4 style="margin: 0;">Adicionar Grupos</h4>
+                        <select id="campaignGroupsInstance" onchange="loadCampaignGroups()" style="flex: 1;">
+                            <option value="">Selecione uma instância</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="loadCampaignGroups()">🔄 Carregar</button>
+                    </div>
+                    
+                    <div id="availableCampaignGroups" style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
+                        <div class="empty-state">
+                            <p>Selecione uma instância para carregar grupos</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Schedule Tab -->
+            <div id="campaignScheduleTab" class="campaign-tab" style="display: none;">
+                <div style="text-align: center; padding: 20px;">
+                    <button class="btn btn-primary" onclick="showScheduleMessageForCampaign()" style="font-size: 1.1rem; padding: 15px 30px;">
+                        ⏰ Programar Nova Mensagem
+                    </button>
+                    <p style="margin-top: 15px; color: #666;">
+                        As mensagens serão enviadas para todos os grupos desta campanha
+                    </p>
+                </div>
+            </div>
+            
+            <!-- View Tab -->
+            <div id="campaignViewTab" class="campaign-tab" style="display: none;">
+                <div id="campaignScheduledMessages" style="max-height: 400px; overflow-y: auto;">
+                    <div class="loading">
+                        <div style="text-align: center; padding: 2rem;">🔄 Carregando programações...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE_URL = window.API_BASE_URL || 'http://78.46.250.112:3002';
         let instances = [];
