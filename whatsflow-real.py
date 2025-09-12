@@ -8774,6 +8774,7 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n👋 WhatsFlow Professional finalizado!")
+        scheduler.stop()
         baileys_manager.stop_baileys()
 
 if __name__ == "__main__":
