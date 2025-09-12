@@ -31,8 +31,8 @@ from typing import Dict, List, Any, Optional
 
 class CampaignTester:
     def __init__(self):
-        # Use the external URL as configured in the system
-        self.base_url = "http://78.46.250.112:8889"
+        # Use localhost since external URL is not accessible in this environment
+        self.base_url = "http://localhost:8889"
         self.api_url = f"{self.base_url}/api"
         
         self.test_results = []
