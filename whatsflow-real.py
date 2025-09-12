@@ -2524,8 +2524,8 @@ HTML_APP = '''<!DOCTYPE html>
                 </div>
             </div>
             
-            <!-- Groups Management Section -->
-            <div class="card">
+            <!-- Groups Management Section - OCULTA (projeto anterior) -->
+            <div class="card" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                     <h2>👥 Grupos WhatsApp Disponíveis</h2>
                     <div>
