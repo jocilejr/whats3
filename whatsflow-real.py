@@ -6129,7 +6129,7 @@ HTML_APP = '''<!DOCTYPE html>
             container.innerHTML = '<div class="loading">🔄 Carregando campanhas...</div>';
             
             try {
-                const response = await fetch('/api/campaigns');
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns`);
                 const campaigns = await response.json();
                 
                 if (campaigns.length === 0) {
