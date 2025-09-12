@@ -6085,28 +6085,22 @@ HTML_APP = '''<!DOCTYPE html>
                 return;
             }
             
-            // Get selected instances
-            const selectedInstances = [];
-            document.querySelectorAll('#campaignInstancesList input[type="checkbox"]:checked').forEach(checkbox => {
-                selectedInstances.push(checkbox.value);
-            });
-            
-            if (selectedInstances.length === 0) {
-                alert('❌ Selecione pelo menos uma instância!');
-                return;
-            }
-            
+            const selectedInstances = Array.from(document.querySelectorAll('#campaignInstancesList input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
+
             try {
                 const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
+                    body: JSON.stringify(selectedInstances.length > 0 ? {
                         name: name,
                         description: description,
                         instances: selectedInstances,
                         status: 'active'
+                    } : {
+                        name: name,
+                        description: description
                     })
                 });
                 
