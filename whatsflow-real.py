@@ -8467,8 +8467,10 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT * FROM scheduled_messages 
-                ORDER BY created_at DESC
+                SELECT sm.*, smg.group_id, smg.group_name, smg.instance_id
+                FROM scheduled_messages sm
+                LEFT JOIN scheduled_message_groups smg ON sm.id = smg.message_id
+                ORDER BY sm.created_at DESC
             """)
             
             messages = []
@@ -8476,19 +8478,19 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 messages.append({
                     'id': row[0],
                     'campaign_id': row[1],
-                    'group_id': row[2] if len(row) > 2 else None,
-                    'group_name': row[3] if len(row) > 3 else None,
-                    'instance_id': row[4] if len(row) > 4 else None,
-                    'message_text': row[5] if len(row) > 5 else row[2],  # Compatibility
-                    'message_type': row[6] if len(row) > 6 else 'text',
-                    'media_url': row[7] if len(row) > 7 else None,
-                    'schedule_type': row[8] if len(row) > 8 else row[3],  # Compatibility
-                    'schedule_time': row[9] if len(row) > 9 else row[4],  # Compatibility
-                    'schedule_days': row[10] if len(row) > 10 else row[5],  # Compatibility
-                    'schedule_date': row[11] if len(row) > 11 else row[6],  # Compatibility
-                    'is_active': row[12] if len(row) > 12 else row[7],  # Compatibility
-                    'next_run': row[13] if len(row) > 13 else row[8],  # Compatibility
-                    'created_at': row[14] if len(row) > 14 else row[9]  # Compatibility
+                    'message_text': row[2],
+                    'message_type': row[3],
+                    'media_url': row[4],
+                    'schedule_type': row[5],
+                    'schedule_time': row[6],
+                    'schedule_days': row[7],
+                    'schedule_date': row[8],
+                    'is_active': bool(row[9]),
+                    'next_run': row[10],
+                    'created_at': row[11],
+                    'group_id': row[12],
+                    'group_name': row[13],
+                    'instance_id': row[14]
                 })
             
             conn.close()
