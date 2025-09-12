@@ -6273,7 +6273,7 @@ HTML_APP = '''<!DOCTYPE html>
             container.innerHTML = '<div class="loading">🔄 Carregando grupos...</div>';
             
             try {
-                const response = await fetch(`http://localhost:3002/groups/${instanceId}`);
+                const response = await fetch(`${window.API_BASE_URL}/groups/${instanceId}`);
                 const groups = await response.json();
                 
                 if (!groups || groups.length === 0) {
