@@ -5,6 +5,7 @@ const makeWASocket = require('@whiskeysockets/baileys').default;
 const qrTerminal = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+const { notifyDisconnection, importChatsBatch, notifyConnected, handleIncomingMessage } = require('./localHandlers');
 
 const app = express();
 
@@ -139,19 +140,11 @@ async function connectInstance(instanceId) {
                     }
                 }
 
-                // Notify backend about disconnection
+                // Notify system about disconnection without HTTP
                 try {
-                    const fetch = (await import('node-fetch')).default;
-                    await fetch('http://localhost:8889/api/whatsapp/disconnected', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            instanceId: instanceId,
-                            reason: reason
-                        })
-                    });
+                    notifyDisconnection(instanceId, reason);
                 } catch (err) {
-                    console.log('⚠️ Não foi possível notificar desconexão:', err.message);
+                    console.log('⚠️ Não foi possível processar desconexão:', err.message);
                 }
 
             } else if (connection === 'open') {
@@ -196,19 +189,14 @@ async function connectInstance(instanceId) {
                         for (let i = 0; i < chats.length; i += batchSize) {
                             const batch = chats.slice(i, i + batchSize);
 
-                            // Send batch to Python backend
-                            const fetch = (await import('node-fetch')).default;
-                            await fetch('http://localhost:8889/api/chats/import', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    instanceId: instanceId,
-                                    chats: batch,
-                                    user: instance.user,
-                                    batchNumber: Math.floor(i / batchSize) + 1,
-                                    totalBatches: Math.ceil(chats.length / batchSize)
-                                })
-                            });
+                            // Send batch to local handler
+                            importChatsBatch(
+                                instanceId,
+                                batch,
+                                instance.user,
+                                Math.floor(i / batchSize) + 1,
+                                Math.ceil(chats.length / batchSize)
+                            );
 
                             console.log(`📦 Lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(chats.length / batchSize)} enviado`);
 
@@ -223,22 +211,13 @@ async function connectInstance(instanceId) {
                     }
                 }, 5000); // Wait 5 seconds after connection
 
-                // Send connected notification to Python backend
-                setTimeout(async () => {
+                // Send connected notification locally
+                setTimeout(() => {
                     try {
-                        const fetch = (await import('node-fetch')).default;
-                        await fetch('http://localhost:8889/api/whatsapp/connected', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                instanceId: instanceId,
-                                user: instance.user,
-                                connectedAt: new Date().toISOString()
-                            })
-                        });
-                        console.log('✅ Backend notificado sobre a conexão');
+                        notifyConnected(instanceId, instance.user, new Date().toISOString());
+                        console.log('✅ Sistema notificado sobre a conexão');
                     } catch (err) {
-                        console.log('⚠️ Erro ao notificar backend:', err.message);
+                        console.log('⚠️ Erro ao notificar sistema:', err.message);
                     }
                 }, 2000);
 
@@ -271,38 +250,20 @@ async function connectInstance(instanceId) {
                     console.log(`👤 Contato: ${contactName || from.split('@')[0]} (${from.split('@')[0]})`);
                     console.log(`💬 Mensagem: ${messageText.substring(0, 50)}...`);
 
-                    // Send to Python backend with retry logic
-                    let retries = 3;
-                    while (retries > 0) {
-                        try {
-                            const fetch = (await import('node-fetch')).default;
-                            const response = await fetch('http://localhost:8889/api/messages/receive', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    instanceId: instanceId,
-                                    from: from,
-                                    message: messageText,
-                                    pushName: pushName,
-                                    contactName: contactName,
-                                    timestamp: new Date().toISOString(),
-                                    messageId: message.key.id,
-                                    messageType: message.message.conversation ? 'text' : 'media'
-                                })
-                            });
-
-                            if (response.ok) {
-                                break; // Success, exit retry loop
-                            } else {
-                                throw new Error(`HTTP ${response.status}`);
-                            }
-                        } catch (err) {
-                            retries--;
-                            console.log(`❌ Erro ao enviar mensagem (tentativas restantes: ${retries}):`, err.message);
-                            if (retries > 0) {
-                                await new Promise(resolve => setTimeout(resolve, 2000));
-                            }
-                        }
+                    // Handle message locally
+                    try {
+                        handleIncomingMessage({
+                            instanceId: instanceId,
+                            from: from,
+                            message: messageText,
+                            pushName: pushName,
+                            contactName: contactName,
+                            timestamp: new Date().toISOString(),
+                            messageId: message.key.id,
+                            messageType: message.message.conversation ? 'text' : 'media'
+                        });
+                    } catch (err) {
+                        console.log('❌ Erro ao processar mensagem:', err.message);
                     }
                 }
             }
