@@ -35,7 +35,7 @@ except ImportError:
 # Configurações
 DB_FILE = "whatsflow.db"
 PORT = 8889
-BAILEYS_PORT = 3002
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:3002")
 WEBSOCKET_PORT = 8890
 
 # WebSocket clients management
@@ -2597,6 +2597,7 @@ HTML_APP = '''<!DOCTYPE html>
     </div>
 
     <script>
+        const API_BASE_URL = window.API_BASE_URL || `http://${window.location.hostname}:3002`;
         let instances = [];
         let currentInstanceId = null;
         let qrPollingInterval = null;
@@ -3187,7 +3188,7 @@ HTML_APP = '''<!DOCTYPE html>
 
         async function sendMessage(phone, message) {
             try {
-                const response = await fetch('http://127.0.0.1:3002/send', {
+                const response = await fetch(`${API_BASE_URL}/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ to: phone, message: message })
@@ -3548,7 +3549,7 @@ HTML_APP = '''<!DOCTYPE html>
                 console.log('📤 Enviando mensagem para:', currentChat.phone, 'via instância:', currentChat.instanceId);
                 
                 // First check if Baileys service is available
-                const healthResponse = await fetch('http://127.0.0.1:3002/health', {
+                const healthResponse = await fetch(`${API_BASE_URL}/health`, {
                     method: 'GET',
                     timeout: 5000
                 });
@@ -3558,7 +3559,7 @@ HTML_APP = '''<!DOCTYPE html>
                 }
                 
                 // Use Baileys service to send message with corrected URL and proper error handling
-                const response = await fetch(`http://127.0.0.1:3002/send/${currentChat.instanceId}`, {
+                const response = await fetch(`${API_BASE_URL}/send/${currentChat.instanceId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -3922,7 +3923,7 @@ HTML_APP = '''<!DOCTYPE html>
                 `;
                 
                 // Request groups from Baileys with proper error handling
-                const response = await fetch(`http://127.0.0.1:3002/groups/${instanceId}`, {
+                const response = await fetch(`${API_BASE_URL}/groups/${instanceId}`, {
                     method: 'GET',
                     headers: {
                         'Accept': 'application/json',
@@ -4036,7 +4037,7 @@ HTML_APP = '''<!DOCTYPE html>
             }
             
             try {
-                const response = await fetch(`http://127.0.0.1:3002/send/${instanceId}`, {
+                const response = await fetch(`${API_BASE_URL}/send/${instanceId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -4426,12 +4427,10 @@ HTML_APP = '''<!DOCTYPE html>
         }
         
         async function loadInstanceGroups() {
-            // Se o frontend e o serviço Baileys estiverem em máquinas diferentes,
-            // defina window.BAILEYS_URL antes de chamar loadInstanceGroups.
+            // Se o frontend e o serviço estiverem em máquinas diferentes,
+            // defina window.API_BASE_URL antes de chamar loadInstanceGroups.
             // A URL pode ser injetada pelo servidor através da variável de ambiente
-            // BAILEYS_URL; caso contrário, utilizamos o host atual como fallback.
-            const BAILEYS_URL =
-                window.BAILEYS_URL || `http://${window.location.hostname}:3002`;
+            // API_BASE_URL; caso contrário, utilizamos o host atual como fallback.
 
             const instanceId = document.getElementById('groupsInstanceSelect').value;
             const container = document.getElementById('available-groups-list');
@@ -4446,7 +4445,7 @@ HTML_APP = '''<!DOCTYPE html>
 
             // codex/handle-fetch-error-in-loadinstancegroups
 
-                const response = await fetch(`${BAILEYS_URL}/groups/${instanceId}`);
+                const response = await fetch(`${API_BASE_URL}/groups/${instanceId}`);
                 const result = await response.json();
 
                 if (response.ok && result.success && result.groups) {
@@ -4465,7 +4464,7 @@ HTML_APP = '''<!DOCTYPE html>
                         <div class="empty-state">
                             <div class="empty-icon">❌</div>
                             <div class="empty-title">Erro ao carregar grupos</div>
-                            <p>Não foi possível conectar ao serviço Baileys (${BAILEYS_URL}). Verifique se ele está em execução.</p>
+                            <p>Não foi possível conectar ao serviço (${API_BASE_URL}). Verifique se ele está em execução.</p>
                             <button class="btn btn-primary" onclick="loadInstanceGroups()">🔄 Tentar Novamente</button>
                         </div>
                     `;
@@ -4875,20 +4874,12 @@ HTML_APP = '''<!DOCTYPE html>
 </body>
 </html>'''
 
-# Inject Baileys URL from environment into the frontend
-# If no environment variables are provided, the frontend will fall back to the
-# current hostname when contacting the Baileys service.
-BAILEYS_ENV_URL = os.environ.get("BAILEYS_URL")
-if not BAILEYS_ENV_URL:
-    host = os.environ.get("BAILEYS_HOST")
-    if host:
-        BAILEYS_ENV_URL = f"http://{host}:{BAILEYS_PORT}"
-if BAILEYS_ENV_URL:
-    HTML_APP = HTML_APP.replace(
-        "<body>",
-        f"<body><script>window.BAILEYS_URL = {json.dumps(BAILEYS_ENV_URL)};</script>",
-        1,
-    )
+# Inject API base URL from environment into the frontend
+HTML_APP = HTML_APP.replace(
+    "<body>",
+    f"<body><script>window.API_BASE_URL = {json.dumps(API_BASE_URL)};</script>",
+    1,
+)
 
 # Database setup (same as before but with WebSocket integration)
 def init_db():
@@ -6046,7 +6037,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             # Start Baileys connection
             try:
                 import requests
-                response = requests.post('http://127.0.0.1:3002/connect', timeout=5)
+                response = requests.post(f'{API_BASE_URL}/connect', timeout=5)
                 
                 if response.status_code == 200:
                     self.send_json_response({"success": True, "message": "Conexão iniciada"})
@@ -6059,7 +6050,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 
                 try:
                     data = json.dumps({}).encode('utf-8')
-                    req = urllib.request.Request('http://127.0.0.1:3002/connect', data=data, 
+                    req = urllib.request.Request(f'{API_BASE_URL}/connect', data=data,
                                                headers={'Content-Type': 'application/json'})
                     req.get_method = lambda: 'POST'
                     
@@ -6078,7 +6069,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         try:
             try:
                 import requests
-                response = requests.get('http://127.0.0.1:3002/status', timeout=5)
+                response = requests.get(f'{API_BASE_URL}/status', timeout=5)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -6088,7 +6079,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             except ImportError:
                 # Fallback usando urllib
                 try:
-                    with urllib.request.urlopen('http://127.0.0.1:3002/status', timeout=5) as response:
+                    with urllib.request.urlopen(f'{API_BASE_URL}/status', timeout=5) as response:
                         if response.status == 200:
                             data = json.loads(response.read().decode('utf-8'))
                             self.send_json_response(data)
@@ -6104,7 +6095,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         try:
             try:
                 import requests
-                response = requests.get('http://127.0.0.1:3002/qr', timeout=5)
+                response = requests.get(f'{API_BASE_URL}/qr', timeout=5)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -6114,7 +6105,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             except ImportError:
                 # Fallback usando urllib
                 try:
-                    with urllib.request.urlopen('http://127.0.0.1:3002/qr', timeout=5) as response:
+                    with urllib.request.urlopen(f'{API_BASE_URL}/qr', timeout=5) as response:
                         if response.status == 200:
                             data = json.loads(response.read().decode('utf-8'))
                             self.send_json_response(data)
@@ -6249,7 +6240,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             # Start Baileys connection for specific instance
             try:
                 import requests
-                response = requests.post(f'http://127.0.0.1:3002/connect/{instance_id}', timeout=5)
+                response = requests.post(f'{API_BASE_URL}/connect/{instance_id}', timeout=5)
                 
                 if response.status_code == 200:
                     self.send_json_response({"success": True, "message": f"Conexão da instância {instance_id} iniciada"})
@@ -6262,7 +6253,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 
                 try:
                     data = json.dumps({}).encode('utf-8')
-                    req = urllib.request.Request(f'http://127.0.0.1:3002/connect/{instance_id}', data=data, 
+                    req = urllib.request.Request(f'{API_BASE_URL}/connect/{instance_id}', data=data,
                                                headers={'Content-Type': 'application/json'})
                     req.get_method = lambda: 'POST'
                     
@@ -6281,7 +6272,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         try:
             try:
                 import requests
-                response = requests.post(f'http://127.0.0.1:3002/disconnect/{instance_id}', timeout=5)
+                response = requests.post(f'{API_BASE_URL}/disconnect/{instance_id}', timeout=5)
                 
                 if response.status_code == 200:
                     # Update database
@@ -6298,7 +6289,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 # Fallback usando urllib
                 import urllib.request
                 data = json.dumps({}).encode('utf-8')
-                req = urllib.request.Request(f'http://127.0.0.1:3002/disconnect/{instance_id}', data=data,
+                req = urllib.request.Request(f'{API_BASE_URL}/disconnect/{instance_id}', data=data,
                                            headers={'Content-Type': 'application/json'})
                 req.get_method = lambda: 'POST'
                 
@@ -6320,7 +6311,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         try:
             try:
                 import requests
-                response = requests.get(f'http://127.0.0.1:3002/status/{instance_id}', timeout=5)
+                response = requests.get(f'{API_BASE_URL}/status/{instance_id}', timeout=5)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -6330,7 +6321,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             except ImportError:
                 # Fallback usando urllib
                 try:
-                    with urllib.request.urlopen(f'http://127.0.0.1:3002/status/{instance_id}', timeout=5) as response:
+                    with urllib.request.urlopen(f'{API_BASE_URL}/status/{instance_id}', timeout=5) as response:
                         if response.status == 200:
                             data = json.loads(response.read().decode('utf-8'))
                             self.send_json_response(data)
@@ -6346,7 +6337,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         try:
             try:
                 import requests
-                response = requests.get(f'http://127.0.0.1:3002/qr/{instance_id}', timeout=5)
+                response = requests.get(f'{API_BASE_URL}/qr/{instance_id}', timeout=5)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -6356,7 +6347,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             except ImportError:
                 # Fallback usando urllib
                 try:
-                    with urllib.request.urlopen(f'http://127.0.0.1:3002/qr/{instance_id}', timeout=5) as response:
+                    with urllib.request.urlopen(f'{API_BASE_URL}/qr/{instance_id}', timeout=5) as response:
                         if response.status == 200:
                             data = json.loads(response.read().decode('utf-8'))
                             self.send_json_response(data)
@@ -6380,7 +6371,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             
             try:
                 import requests
-                response = requests.post(f'http://127.0.0.1:3002/send/{instance_id}', 
+                response = requests.post(f'{API_BASE_URL}/send/{instance_id}',
                                        json=data, timeout=10)
                 
                 if response.status_code == 200:
@@ -6407,8 +6398,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 # Fallback usando urllib
                 import urllib.request
                 req_data = json.dumps(data).encode('utf-8')
-                req = urllib.request.Request(f'http://127.0.0.1:3002/send/{instance_id}', 
-                                           data=req_data, 
+                req = urllib.request.Request(f'{API_BASE_URL}/send/{instance_id}',
+                                           data=req_data,
                                            headers={'Content-Type': 'application/json'})
                 req.get_method = lambda: 'POST'
                 
@@ -7390,7 +7381,7 @@ def main():
     print("✅ WhatsFlow Professional configurado!")
     print(f"🌐 Interface: http://localhost:{PORT}")
     print(f"🔌 WebSocket: ws://localhost:{WEBSOCKET_PORT}")
-    print(f"📱 WhatsApp Service: http://localhost:{BAILEYS_PORT}")
+    print(f"📱 WhatsApp Service: {API_BASE_URL}")
     print("🚀 Servidor iniciando...")
     print("   Para parar: Ctrl+C")
     print()
