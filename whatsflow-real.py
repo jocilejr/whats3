@@ -5901,8 +5901,18 @@ def init_db():
             schedule_date TEXT, -- YYYY-MM-DD for 'once' type
             is_active INTEGER DEFAULT 1,
             next_run TEXT, -- Next execution datetime in Brazil timezone
-            created_at TEXT,
-            FOREIGN KEY (campaign_id) REFERENCES campaigns (id) ON DELETE CASCADE
+            created_at TEXT
+        )
+    """)
+    
+    # Create table for scheduled message groups relationship
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scheduled_message_groups (
+            message_id TEXT,
+            group_id TEXT,
+            group_name TEXT,
+            instance_id TEXT,
+            PRIMARY KEY (message_id, group_id)
         )
     """)
     
