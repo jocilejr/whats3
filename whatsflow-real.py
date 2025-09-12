@@ -8806,11 +8806,13 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             
             cursor.execute("""
                 SELECT c.*, 
-                       COUNT(cg.id) as groups_count,
-                       COUNT(sm.id) as schedules_count
+                       COUNT(DISTINCT cg.group_id) as groups_count,
+                       COUNT(DISTINCT sm.id) as scheduled_count,
+                       COUNT(DISTINCT ci.instance_id) as instances_count
                 FROM campaigns c
                 LEFT JOIN campaign_groups cg ON c.id = cg.campaign_id
                 LEFT JOIN scheduled_messages sm ON c.id = sm.campaign_id AND sm.is_active = 1
+                LEFT JOIN campaign_instances ci ON c.id = ci.campaign_id
                 GROUP BY c.id
                 ORDER BY c.created_at DESC
             """)
@@ -8820,13 +8822,13 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 campaigns.append({
                     'id': row[0],
                     'name': row[1],
-                    'description': row[2],
+                    'description': row[2] or '',
                     'status': row[3],
-                    'instance_id': row[4],
-                    'created_at': row[5],
-                    'updated_at': row[6],
-                    'groups_count': row[7],
-                    'schedules_count': row[8]
+                    'created_at': row[4],
+                    'updated_at': row[5],
+                    'groups_count': row[6],
+                    'scheduled_count': row[7],
+                    'instances_count': row[8]
                 })
             
             conn.close()
