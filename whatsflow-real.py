@@ -5974,7 +5974,7 @@ HTML_APP = '''<!DOCTYPE html>
         // Toggle scheduled message active/inactive
         async function toggleScheduledMessage(messageId, activate) {
             try {
-                const response = await fetch(`/api/scheduled-messages/${messageId}`, {
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/scheduled-messages/${messageId}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
