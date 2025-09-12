@@ -1918,6 +1918,66 @@ HTML_APP = '''<!DOCTYPE html>
             line-height: 1.4;
         }
         
+        /* Campaign Modal Styles */
+        .campaign-nav-btn {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            color: #666;
+        }
+        
+        .campaign-nav-btn.active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+        }
+        
+        .campaign-tab {
+            display: none;
+        }
+        
+        .campaign-tab.active {
+            display: block;
+        }
+        
+        .group-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .group-item:hover {
+            background: #f8f9fa;
+            border-color: var(--primary-color);
+        }
+        
+        .group-item.selected {
+            background: #e8f5e8;
+            border-color: var(--primary-color);
+        }
+        
+        .group-item input[type="checkbox"] {
+            margin-right: 10px;
+        }
+        
+        .group-info {
+            flex: 1;
+        }
+        
+        .group-name {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .group-participants {
+            font-size: 0.8rem;
+            color: #666;
+        }
+        
         .campaign-card {
             background: linear-gradient(135deg, #ffffff 0%, #f8fffe 100%);
             border: 1px solid #e3f2f0;
