@@ -179,7 +179,7 @@ class URLCorrectionsValidator:
                 timeout=10
             )
             
-            if response.status_code == 201:
+            if response.status_code in [200, 201]:
                 created_campaign = response.json()
                 campaign_id = created_campaign.get('id')
                 
