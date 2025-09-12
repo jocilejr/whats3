@@ -6363,7 +6363,7 @@ HTML_APP = '''<!DOCTYPE html>
             if (!currentCampaignId) return;
             
             try {
-                await fetch(`/api/campaigns/${currentCampaignId}/groups`, {
+                await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${currentCampaignId}/groups`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
