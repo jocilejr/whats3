@@ -302,17 +302,19 @@ class CampaignTester:
             return False
             
         try:
-            # Create test groups data
+            # Create test groups data with instance_id
             test_groups = [
                 {
                     "group_id": "test_group_1",
                     "group_name": "Grupo Teste 1",
-                    "participants_count": 25
+                    "participants_count": 25,
+                    "instance_id": self.available_instances[0].get('id') if self.available_instances else "default"
                 },
                 {
                     "group_id": "test_group_2", 
                     "group_name": "Grupo Teste 2",
-                    "participants_count": 15
+                    "participants_count": 15,
+                    "instance_id": self.available_instances[0].get('id') if self.available_instances else "default"
                 }
             ]
             
