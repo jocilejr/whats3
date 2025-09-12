@@ -9275,7 +9275,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT DISTINCT i.id, i.name, i.status, i.created_at
+                SELECT DISTINCT i.id, i.name, i.connected, i.created_at
                 FROM instances i
                 JOIN campaign_instances ci ON i.id = ci.instance_id
                 WHERE ci.campaign_id = ?
@@ -9287,7 +9287,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 instances.append({
                     'id': row[0],
                     'name': row[1],
-                    'status': row[2],
+                    'status': 'connected' if row[2] else 'disconnected',
+                    'connected': bool(row[2]),
                     'created_at': row[3]
                 })
             
