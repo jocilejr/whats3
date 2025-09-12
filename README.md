@@ -30,3 +30,12 @@ serviço.
 Se `window.BAILEYS_URL` não for definida, o frontend tentará se conectar
 a `http://${window.location.hostname}:3002` por padrão.
 
+Alternativamente, o servidor pode injetar esse valor definindo a variável de
+ambiente `BAILEYS_URL` (ou `BAILEYS_HOST`). Quando presente, o frontend recebe
+automaticamente `window.BAILEYS_URL` com o valor informado.
+
+```bash
+export BAILEYS_URL="http://meu-servidor-de-baileys:3002"
+python3 whatsflow-real.py
+```
+

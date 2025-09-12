@@ -4428,6 +4428,8 @@ HTML_APP = '''<!DOCTYPE html>
         async function loadInstanceGroups() {
             // Se o frontend e o serviço Baileys estiverem em máquinas diferentes,
             // defina window.BAILEYS_URL antes de chamar loadInstanceGroups.
+            // A URL pode ser injetada pelo servidor através da variável de ambiente
+            // BAILEYS_URL; caso contrário, utilizamos o host atual como fallback.
             const BAILEYS_URL =
                 window.BAILEYS_URL || `http://${window.location.hostname}:3002`;
 
@@ -4873,17 +4875,20 @@ HTML_APP = '''<!DOCTYPE html>
 </body>
 </html>'''
 
-# Inject Baileys URL from environment into frontend
-# If BAILEYS_URL isn't provided, default to the local Baileys service address
-BAILEYS_HOST = os.environ.get("BAILEYS_HOST", "localhost")
-BAILEYS_ENV_URL = os.environ.get(
-    "BAILEYS_URL", f"http://{BAILEYS_HOST}:{BAILEYS_PORT}"
-)
-HTML_APP = HTML_APP.replace(
-    "<body>",
-    f"<body><script>window.BAILEYS_URL = {json.dumps(BAILEYS_ENV_URL)};</script>",
-    1,
-)
+# Inject Baileys URL from environment into the frontend
+# If no environment variables are provided, the frontend will fall back to the
+# current hostname when contacting the Baileys service.
+BAILEYS_ENV_URL = os.environ.get("BAILEYS_URL")
+if not BAILEYS_ENV_URL:
+    host = os.environ.get("BAILEYS_HOST")
+    if host:
+        BAILEYS_ENV_URL = f"http://{host}:{BAILEYS_PORT}"
+if BAILEYS_ENV_URL:
+    HTML_APP = HTML_APP.replace(
+        "<body>",
+        f"<body><script>window.BAILEYS_URL = {json.dumps(BAILEYS_ENV_URL)};</script>",
+        1,
+    )
 
 # Database setup (same as before but with WebSocket integration)
 def init_db():
