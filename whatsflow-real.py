@@ -35,7 +35,7 @@ except ImportError:
 # Configurações
 DB_FILE = "whatsflow.db"
 PORT = 8889
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:3002")
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://78.46.250.112:3002")
 WEBSOCKET_PORT = 8890
 
 # WebSocket clients management
@@ -2597,7 +2597,7 @@ HTML_APP = '''<!DOCTYPE html>
     </div>
 
     <script>
-        const API_BASE_URL = window.API_BASE_URL || `http://${window.location.hostname}:3002`;
+        const API_BASE_URL = window.API_BASE_URL || 'http://78.46.250.112:3002';
         let instances = [];
         let currentInstanceId = null;
         let qrPollingInterval = null;
