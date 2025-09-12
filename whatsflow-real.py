@@ -9245,6 +9245,76 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             print(f"❌ Erro ao calcular próxima execução: {e}")
             return None
 
+    def handle_get_campaign_instances(self, campaign_id):
+        """Get instances associated with a campaign"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT DISTINCT i.id, i.name, i.status, i.created_at
+                FROM instances i
+                JOIN campaign_instances ci ON i.id = ci.instance_id
+                WHERE ci.campaign_id = ?
+                ORDER BY i.name
+            """, (campaign_id,))
+            
+            instances = []
+            for row in cursor.fetchall():
+                instances.append({
+                    'id': row[0],
+                    'name': row[1],
+                    'status': row[2],
+                    'created_at': row[3]
+                })
+            
+            conn.close()
+            self.send_json_response(instances)
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter instâncias da campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
+    def handle_get_campaign_scheduled_messages(self, campaign_id):
+        """Get scheduled messages for a campaign"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT sm.*, 
+                       COUNT(smg.group_id) as groups_count
+                FROM scheduled_messages sm
+                LEFT JOIN scheduled_message_groups smg ON sm.id = smg.message_id
+                WHERE sm.campaign_id = ?
+                GROUP BY sm.id
+                ORDER BY sm.next_run ASC
+            """, (campaign_id,))
+            
+            messages = []
+            for row in cursor.fetchall():
+                messages.append({
+                    'id': row[0],
+                    'campaign_id': row[1],
+                    'message_text': row[2],
+                    'message_type': row[3],
+                    'media_url': row[4],
+                    'schedule_type': row[5],
+                    'schedule_time': row[6],
+                    'schedule_days': row[7],
+                    'is_active': bool(row[8]),
+                    'next_run': row[9],
+                    'created_at': row[10],
+                    'groups_count': row[11]
+                })
+            
+            conn.close()
+            self.send_json_response(messages)
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter mensagens programadas da campanha: {e}")
+            self.send_json_response({"error": str(e)}, 500)
+
     # ===== SCHEDULED MESSAGES HANDLERS =====
     
     def handle_get_scheduled_messages(self):
