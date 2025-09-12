@@ -8748,10 +8748,24 @@ def main():
     baileys_thread.daemon = True
     baileys_thread.start()
     
+    # Start Message Scheduler
+    print("⏰ Iniciando agendador de mensagens...")
+    scheduler = MessageScheduler(API_BASE_URL)
+    scheduler.start()
+    
+    def signal_handler_with_scheduler(sig, frame):
+        print("\n🛑 Parando serviços...")
+        scheduler.stop()
+        baileys_manager.stop_baileys()
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler_with_scheduler)
+    
     print("✅ WhatsFlow Professional configurado!")
     print(f"🌐 Interface: http://localhost:{PORT}")
     print(f"🔌 WebSocket: ws://localhost:{WEBSOCKET_PORT}")
     print(f"📱 WhatsApp Service: {API_BASE_URL}")
+    print("⏰ Agendador de Mensagens: Ativo")
     print("🚀 Servidor iniciando...")
     print("   Para parar: Ctrl+C")
     print()
