@@ -7800,6 +7800,12 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_create_flow()
         elif self.path == '/api/campaigns':
             self.handle_create_campaign()
+        elif self.path.startswith('/api/campaigns/') and '/instances' in self.path:
+            campaign_id = self.path.split('/')[3]
+            self.handle_get_campaign_instances(campaign_id)
+        elif self.path.startswith('/api/campaigns/') and '/scheduled-messages' in self.path:
+            campaign_id = self.path.split('/')[3]
+            self.handle_get_campaign_scheduled_messages(campaign_id)
         elif self.path.startswith('/api/campaigns/') and '/groups' in self.path:
             campaign_id = self.path.split('/')[3]
             self.handle_add_campaign_groups(campaign_id)
