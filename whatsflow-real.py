@@ -4989,13 +4989,15 @@ def init_db():
         CREATE TABLE IF NOT EXISTS scheduled_messages (
             id TEXT PRIMARY KEY,
             campaign_id TEXT NOT NULL,
-            message_text TEXT NOT NULL,
-            schedule_type TEXT NOT NULL, -- daily, weekly, once
+            message_text TEXT,
+            message_type TEXT DEFAULT 'text', -- text, image, audio, video
+            media_url TEXT, -- URL for media files
+            schedule_type TEXT NOT NULL, -- once, weekly
             schedule_time TEXT NOT NULL, -- HH:MM format
-            schedule_days TEXT, -- JSON array for weekly: ["monday", "tuesday"] or null for daily/once
+            schedule_days TEXT, -- JSON array for weekly: ["monday", "tuesday"] or null for once
             schedule_date TEXT, -- YYYY-MM-DD for 'once' type
             is_active INTEGER DEFAULT 1,
-            next_run TEXT, -- Next execution datetime
+            next_run TEXT, -- Next execution datetime in Brazil timezone
             created_at TEXT,
             FOREIGN KEY (campaign_id) REFERENCES campaigns (id) ON DELETE CASCADE
         )
