@@ -8736,12 +8736,7 @@ def main():
     print("📱 Iniciando serviço WhatsApp (Baileys)...")
     baileys_manager = BaileysManager()
     
-    def signal_handler(sig, frame):
-        print("\n🛑 Parando serviços...")
-        baileys_manager.stop_baileys()
-        sys.exit(0)
-    
-    signal.signal(signal.SIGINT, signal_handler)
+    # Signal handler will be defined later with scheduler
     
     # Start Baileys in background
     baileys_thread = threading.Thread(target=baileys_manager.start_baileys)
