@@ -6058,7 +6058,7 @@ HTML_APP = '''<!DOCTYPE html>
         async function loadInstancesForCampaign() {
             const container = document.getElementById('campaignInstancesList');
             try {
-                const response = await fetch('/api/instances');
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/instances`);
                 const instances = await response.json();
                 
                 container.innerHTML = instances.map(instance => `
