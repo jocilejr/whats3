@@ -6800,6 +6800,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_create_campaign_schedule(campaign_id)
         elif self.path == '/api/webhooks/send':
             self.handle_send_webhook()
+        elif self.path == '/api/scheduled-messages':
+            self.handle_create_scheduled_message()
         else:
             self.send_error(404, "Not Found")
     
