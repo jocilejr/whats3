@@ -2941,14 +2941,14 @@ HTML_APP = '''<!DOCTYPE html>
         <div class="modal-content" style="max-width: 600px;">
             <h3>⏰ Programar Mensagem para Grupos</h3>
             
-            <div style="margin: 20px 0;">
+            <div id="scheduleInstanceSection" style="margin: 20px 0;">
                 <label style="display: block; margin-bottom: 5px; font-weight: 500;">Selecionar Instância:</label>
                 <select id="scheduleInstanceSelect" class="form-input" onchange="loadGroupsForSchedule()">
                     <option value="">Selecione uma instância</option>
                 </select>
             </div>
-            
-            <div style="margin: 20px 0;">
+
+            <div id="scheduleGroupsSection" style="margin: 20px 0;">
                 <label style="display: block; margin-bottom: 5px; font-weight: 500;">Selecionar Grupos:</label>
                 <div id="schedule-groups-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
                     <div class="empty-state">
@@ -5467,15 +5467,27 @@ HTML_APP = '''<!DOCTYPE html>
         // Show schedule message modal
         function showScheduleMessageModal() {
             document.getElementById('scheduleMessageModal').style.display = 'flex';
-            loadInstancesForSchedule();
+
+            if (window.currentScheduleCampaign) {
+                document.getElementById('scheduleInstanceSection').style.display = 'none';
+                document.getElementById('scheduleGroupsSection').style.display = 'none';
+            } else {
+                document.getElementById('scheduleInstanceSection').style.display = 'block';
+                document.getElementById('scheduleGroupsSection').style.display = 'block';
+                loadInstancesForSchedule();
+            }
+
             resetScheduleForm();
         }
-        
+
         // Hide schedule message modal
         function hideScheduleMessageModal() {
             document.getElementById('scheduleMessageModal').style.display = 'none';
             selectedScheduleGroups = [];
             availableScheduleGroups = [];
+            document.getElementById('scheduleInstanceSection').style.display = 'block';
+            document.getElementById('scheduleGroupsSection').style.display = 'block';
+            window.currentScheduleCampaign = null;
         }
         
         // Load instances for scheduling
@@ -6398,17 +6410,6 @@ HTML_APP = '''<!DOCTYPE html>
         
         // Show schedule message modal for specific campaign
         function showScheduleMessageForCampaign() {
-            if (!currentCampaignId) {
-                alert('❌ Nenhuma campanha selecionada');
-                return;
-            }
-            
-            if (selectedCampaignGroups.length === 0) {
-                alert('❌ Adicione grupos à campanha antes de programar mensagens');
-                return;
-            }
-            
-            // Set the campaign context
             window.currentScheduleCampaign = currentCampaignId;
             showScheduleMessageModal();
         }
