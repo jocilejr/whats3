@@ -6751,6 +6751,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_get_messages_filtered()
         elif self.path == '/api/webhooks':
             self.handle_get_webhooks()
+        elif self.path == '/api/scheduled-messages':
+            self.handle_get_scheduled_messages()
         else:
             self.send_error(404, "Not Found")
     
