@@ -6076,7 +6076,9 @@ HTML_APP = '''<!DOCTYPE html>
         }
         
         // Create campaign
-        async function createCampaign() {
+        async function createCampaign(event) {
+            event.preventDefault();
+
             const name = document.getElementById('campaignName').value.trim();
             const description = document.getElementById('campaignDescription').value.trim();
             
