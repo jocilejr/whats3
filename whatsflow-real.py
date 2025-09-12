@@ -9055,11 +9055,12 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             # Add new groups
             for group in groups:
                 group_id = str(uuid.uuid4())
+                instance_id = group.get('instance_id', 'default')  # Use default if not provided
                 cursor.execute("""
                     INSERT INTO campaign_groups (id, campaign_id, group_id, group_name, instance_id, created_at)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (group_id, campaign_id, group['group_id'], group['group_name'], 
-                      group['instance_id'], datetime.now(timezone.utc).isoformat()))
+                      instance_id, datetime.now(timezone.utc).isoformat()))
             
             conn.commit()
             conn.close()
