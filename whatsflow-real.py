@@ -2319,6 +2319,27 @@ HTML_APP = '''<!DOCTYPE html>
                 </div>
             </div>
             
+            <!-- Message Scheduling Section -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h2>⏰ Programar Mensagens</h2>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary" onclick="showScheduledMessagesModal()">
+                            📋 Ver Programações
+                        </button>
+                        <button class="btn btn-primary" onclick="showScheduleMessageModal()">
+                            ⏰ Programar Mensagem
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="scheduled-messages-preview" style="display: none;">
+                    <div class="scheduled-messages-grid" id="scheduled-messages-container">
+                        <!-- Scheduled messages will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            
             <!-- Groups Management Section -->
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
