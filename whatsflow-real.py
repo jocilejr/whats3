@@ -6812,6 +6812,9 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         elif self.path.startswith('/api/campaigns/'):
             campaign_id = self.path.split('/')[-1]
             self.handle_update_campaign(campaign_id)
+        elif self.path.startswith('/api/scheduled-messages/'):
+            message_id = self.path.split('/')[-1]
+            self.handle_update_scheduled_message(message_id)
         else:
             self.send_error(404, "Not Found")
     
