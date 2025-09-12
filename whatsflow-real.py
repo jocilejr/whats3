@@ -6097,7 +6097,7 @@ HTML_APP = '''<!DOCTYPE html>
             }
             
             try {
-                const response = await fetch('/api/campaigns', {
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
