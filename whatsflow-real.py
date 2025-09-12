@@ -5214,6 +5214,562 @@ HTML_APP = '''<!DOCTYPE html>
                 console.error('❌ Erro ao carregar instâncias para grupos:', error);
             }
         }
+        
+        // ===== SCHEDULED MESSAGES FUNCTIONS =====
+        
+        let selectedScheduleGroups = [];
+        let availableScheduleGroups = [];
+        
+        // Show schedule message modal
+        function showScheduleMessageModal() {
+            document.getElementById('scheduleMessageModal').style.display = 'flex';
+            loadInstancesForSchedule();
+            resetScheduleForm();
+        }
+        
+        // Hide schedule message modal
+        function hideScheduleMessageModal() {
+            document.getElementById('scheduleMessageModal').style.display = 'none';
+            selectedScheduleGroups = [];
+            availableScheduleGroups = [];
+        }
+        
+        // Load instances for scheduling
+        async function loadInstancesForSchedule() {
+            try {
+                const response = await fetch('/api/instances');
+                const instances = await response.json();
+                
+                const select = document.getElementById('scheduleInstanceSelect');
+                select.innerHTML = '<option value="">Selecione uma instância</option>';
+                
+                instances.forEach(instance => {
+                    const option = document.createElement('option');
+                    option.value = instance.id;
+                    option.textContent = `${instance.name} ${instance.connected ? '✅' : '❌'}`;
+                    select.appendChild(option);
+                });
+                
+            } catch (error) {
+                console.error('❌ Erro ao carregar instâncias para agendamento:', error);
+            }
+        }
+        
+        // Load groups for scheduling
+        async function loadGroupsForSchedule() {
+            const instanceId = document.getElementById('scheduleInstanceSelect').value;
+            const container = document.getElementById('schedule-groups-list');
+            
+            if (!instanceId) {
+                container.innerHTML = '<div class="empty-state"><p>Selecione uma instância para ver os grupos</p></div>';
+                return;
+            }
+            
+            container.innerHTML = '<div class="loading">🔄 Carregando grupos...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/groups/${instanceId}`);
+                const result = await response.json();
+                
+                if (result.success && result.groups) {
+                    availableScheduleGroups = result.groups;
+                    renderScheduleGroups(result.groups);
+                } else {
+                    throw new Error(result.error || 'Erro ao carregar grupos');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao carregar grupos:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">❌</div>
+                        <div class="empty-title">Erro ao carregar grupos</div>
+                        <p>${error.message}</p>
+                        <button class="btn btn-primary" onclick="loadGroupsForSchedule()">🔄 Tentar Novamente</button>
+                    </div>
+                `;
+            }
+        }
+        
+        // Render groups for selection
+        function renderScheduleGroups(groups) {
+            const container = document.getElementById('schedule-groups-list');
+            
+            if (!groups || groups.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>Nenhum grupo encontrado nesta instância</p></div>';
+                return;
+            }
+            
+            const groupsHtml = groups.map(group => `
+                <div class="group-item" onclick="toggleScheduleGroupSelection('${group.id}')">
+                    <input type="checkbox" id="schedule_group_${group.id}" 
+                           ${isScheduleGroupSelected(group.id) ? 'checked' : ''} 
+                           onchange="event.stopPropagation(); toggleScheduleGroupSelection('${group.id}')">
+                    <div class="group-info">
+                        <div class="group-name">${group.name || 'Grupo sem nome'}</div>
+                        <div class="group-details">${group.participants || 0} participantes • ID: ${group.id.split('@')[0]}</div>
+                    </div>
+                </div>
+            `).join('');
+            
+            container.innerHTML = groupsHtml;
+        }
+        
+        // Toggle group selection for scheduling
+        function toggleScheduleGroupSelection(groupId) {
+            const group = availableScheduleGroups.find(g => g.id === groupId);
+            if (!group) return;
+            
+            const index = selectedScheduleGroups.findIndex(g => g.group_id === groupId);
+            
+            if (index > -1) {
+                selectedScheduleGroups.splice(index, 1);
+            } else {
+                selectedScheduleGroups.push({
+                    group_id: group.id,
+                    group_name: group.name || `Grupo ${group.id.split('@')[0]}`,
+                    instance_id: document.getElementById('scheduleInstanceSelect').value
+                });
+            }
+            
+            updateSelectedScheduleGroupsDisplay();
+            
+            // Update checkbox
+            const checkbox = document.getElementById(`schedule_group_${groupId}`);
+            if (checkbox) {
+                checkbox.checked = index === -1;
+            }
+        }
+        
+        // Check if group is selected for scheduling
+        function isScheduleGroupSelected(groupId) {
+            return selectedScheduleGroups.some(g => g.group_id === groupId);
+        }
+        
+        // Update selected groups display
+        function updateSelectedScheduleGroupsDisplay() {
+            const container = document.getElementById('selected-schedule-groups');
+            
+            if (selectedScheduleGroups.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            const selectedHtml = selectedScheduleGroups.map(group => `
+                <div class="selected-group-tag">
+                    ${group.group_name}
+                    <button class="remove-btn" onclick="removeSelectedScheduleGroup('${group.group_id}')" type="button">×</button>
+                </div>
+            `).join('');
+            
+            container.innerHTML = selectedHtml;
+        }
+        
+        // Remove selected group from scheduling
+        function removeSelectedScheduleGroup(groupId) {
+            const index = selectedScheduleGroups.findIndex(g => g.group_id === groupId);
+            if (index > -1) {
+                selectedScheduleGroups.splice(index, 1);
+                updateSelectedScheduleGroupsDisplay();
+                
+                // Update checkbox if visible
+                const checkbox = document.getElementById(`schedule_group_${groupId}`);
+                if (checkbox) {
+                    checkbox.checked = false;
+                }
+            }
+        }
+        
+        // Handle message type change
+        function handleMessageTypeChange() {
+            const messageType = document.getElementById('scheduleMessageType').value;
+            const textDiv = document.getElementById('textMessageDiv');
+            const mediaDiv = document.getElementById('mediaMessageDiv');
+            const mediaPreview = document.getElementById('mediaPreview');
+            
+            if (messageType === 'text') {
+                textDiv.style.display = 'block';
+                mediaDiv.style.display = 'none';
+                mediaPreview.style.display = 'none';
+            } else {
+                textDiv.style.display = 'none';
+                mediaDiv.style.display = 'block';
+            }
+        }
+        
+        // Handle schedule type change
+        function handleScheduleTypeChange() {
+            const scheduleType = document.getElementById('scheduleTypeSelect').value;
+            const dateDiv = document.getElementById('scheduleDateDiv');
+            const daysDiv = document.getElementById('scheduleDaysDiv');
+            
+            if (scheduleType === 'once') {
+                dateDiv.style.display = 'block';
+                daysDiv.style.display = 'none';
+            } else if (scheduleType === 'weekly') {
+                dateDiv.style.display = 'none';
+                daysDiv.style.display = 'block';
+            }
+        }
+        
+        // Preview media
+        function previewMedia() {
+            const url = document.getElementById('scheduleMediaUrl').value;
+            const preview = document.getElementById('mediaPreview');
+            const messageType = document.getElementById('scheduleMessageType').value;
+            
+            if (!url) {
+                preview.style.display = 'none';
+                return;
+            }
+            
+            let previewHtml = '';
+            
+            if (messageType === 'image') {
+                previewHtml = `
+                    <div style="text-align: center;">
+                        <img src="${url}" alt="Preview" style="max-width: 100%; max-height: 200px; border-radius: 6px;"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar a imagem</div>
+                    </div>
+                `;
+            } else if (messageType === 'video') {
+                previewHtml = `
+                    <div style="text-align: center;">
+                        <video controls style="max-width: 100%; max-height: 200px; border-radius: 6px;"
+                               onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <source src="${url}">
+                            Seu navegador não suporta vídeos.
+                        </video>
+                        <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o vídeo</div>
+                    </div>
+                `;
+            } else if (messageType === 'audio') {
+                previewHtml = `
+                    <div style="text-align: center;">
+                        <audio controls style="width: 100%;"
+                               onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <source src="${url}">
+                            Seu navegador não suporta áudio.
+                        </audio>
+                        <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o áudio</div>
+                    </div>
+                `;
+            }
+            
+            preview.innerHTML = previewHtml;
+            preview.style.display = 'block';
+        }
+        
+        // Reset schedule form
+        function resetScheduleForm() {
+            document.getElementById('scheduleMessageType').value = 'text';
+            document.getElementById('scheduleMessageContent').value = '';
+            document.getElementById('scheduleMediaUrl').value = '';
+            document.getElementById('scheduleMediaCaption').value = '';
+            document.getElementById('scheduleTypeSelect').value = 'once';
+            document.getElementById('scheduleTimeInput').value = '';
+            document.getElementById('scheduleDateInput').value = '';
+            
+            // Uncheck all weekday checkboxes
+            const checkboxes = document.querySelectorAll('input[name="scheduleWeekDays"]');
+            checkboxes.forEach(cb => cb.checked = false);
+            
+            // Reset displays
+            handleMessageTypeChange();
+            handleScheduleTypeChange();
+            
+            // Clear group selections
+            selectedScheduleGroups = [];
+            updateSelectedScheduleGroupsDisplay();
+            
+            // Set default date to tomorrow
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            document.getElementById('scheduleDateInput').value = tomorrow.toISOString().split('T')[0];
+        }
+        
+        // Create scheduled message
+        async function createScheduledMessage() {
+            try {
+                // Validate form
+                if (selectedScheduleGroups.length === 0) {
+                    alert('❌ Selecione pelo menos um grupo');
+                    return;
+                }
+                
+                const messageType = document.getElementById('scheduleMessageType').value;
+                const scheduleType = document.getElementById('scheduleTypeSelect').value;
+                const time = document.getElementById('scheduleTimeInput').value;
+                
+                if (!time) {
+                    alert('❌ Selecione um horário');
+                    return;
+                }
+                
+                let messageContent = '';
+                let mediaUrl = '';
+                
+                if (messageType === 'text') {
+                    messageContent = document.getElementById('scheduleMessageContent').value.trim();
+                    if (!messageContent) {
+                        alert('❌ Digite a mensagem de texto');
+                        return;
+                    }
+                } else {
+                    mediaUrl = document.getElementById('scheduleMediaUrl').value.trim();
+                    messageContent = document.getElementById('scheduleMediaCaption').value.trim();
+                    if (!mediaUrl) {
+                        alert('❌ Insira a URL da mídia');
+                        return;
+                    }
+                }
+                
+                let scheduleDate = '';
+                let scheduleDays = [];
+                
+                if (scheduleType === 'once') {
+                    scheduleDate = document.getElementById('scheduleDateInput').value;
+                    if (!scheduleDate) {
+                        alert('❌ Selecione uma data');
+                        return;
+                    }
+                } else if (scheduleType === 'weekly') {
+                    const checkboxes = document.querySelectorAll('input[name="scheduleWeekDays"]:checked');
+                    scheduleDays = Array.from(checkboxes).map(cb => cb.value);
+                    if (scheduleDays.length === 0) {
+                        alert('❌ Selecione pelo menos um dia da semana');
+                        return;
+                    }
+                }
+                
+                // Create scheduled message for each group
+                const promises = selectedScheduleGroups.map(group => {
+                    return fetch('/api/scheduled-messages', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            group_id: group.group_id,
+                            group_name: group.group_name,
+                            instance_id: group.instance_id,
+                            message_text: messageContent,
+                            message_type: messageType,
+                            media_url: mediaUrl,
+                            schedule_type: scheduleType,
+                            schedule_time: time,
+                            schedule_date: scheduleDate,
+                            schedule_days: scheduleDays
+                        })
+                    });
+                });
+                
+                await Promise.all(promises);
+                
+                alert(`✅ Mensagem agendada para ${selectedScheduleGroups.length} grupo(s)!`);
+                hideScheduleMessageModal();
+                
+            } catch (error) {
+                console.error('❌ Erro ao agendar mensagem:', error);
+                alert(`❌ Erro ao agendar mensagem: ${error.message}`);
+            }
+        }
+        
+        // Show scheduled messages modal
+        function showScheduledMessagesModal() {
+            document.getElementById('scheduledMessagesModal').style.display = 'flex';
+            loadScheduledMessages();
+        }
+        
+        // Hide scheduled messages modal
+        function hideScheduledMessagesModal() {
+            document.getElementById('scheduledMessagesModal').style.display = 'none';
+        }
+        
+        // Load scheduled messages
+        async function loadScheduledMessages() {
+            const container = document.getElementById('scheduled-messages-list');
+            container.innerHTML = '<div class="loading">🔄 Carregando mensagens programadas...</div>';
+            
+            try {
+                const response = await fetch('/api/scheduled-messages');
+                const messages = await response.json();
+                
+                renderScheduledMessages(messages);
+                
+            } catch (error) {
+                console.error('❌ Erro ao carregar mensagens programadas:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">❌</div>
+                        <div class="empty-title">Erro ao carregar mensagens</div>
+                        <p>${error.message}</p>
+                        <button class="btn btn-primary" onclick="loadScheduledMessages()">🔄 Tentar Novamente</button>
+                    </div>
+                `;
+            }
+        }
+        
+        // Render scheduled messages
+        function renderScheduledMessages(messages) {
+            const container = document.getElementById('scheduled-messages-list');
+            
+            if (!messages || messages.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">⏰</div>
+                        <div class="empty-title">Nenhuma mensagem programada</div>
+                        <p>Crie sua primeira mensagem programada!</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const messagesHtml = messages.map(msg => {
+                const nextRun = msg.next_run ? new Date(msg.next_run).toLocaleString('pt-BR') : 'Não calculado';
+                const scheduleInfo = getScheduleInfoText(msg);
+                
+                return `
+                    <div class="scheduled-message-card">
+                        <div class="scheduled-message-header">
+                            <div class="scheduled-message-type ${msg.message_type}">
+                                ${getMessageTypeIcon(msg.message_type)} ${msg.message_type.toUpperCase()}
+                            </div>
+                            <div style="font-size: 0.8rem; color: #6b7280;">
+                                ${msg.is_active ? '🟢 Ativo' : '🔴 Inativo'}
+                            </div>
+                        </div>
+                        
+                        <div style="margin: 12px 0;">
+                            <strong>Grupo:</strong> ${msg.group_name}
+                        </div>
+                        
+                        <div class="schedule-info">
+                            <div class="schedule-time">⏰ ${msg.schedule_time}</div>
+                            <div style="font-size: 0.85rem; color: #6b7280; margin-top: 4px;">
+                                ${scheduleInfo}
+                            </div>
+                        </div>
+                        
+                        <div class="message-preview">
+                            ${msg.message_type === 'text' ? 
+                                `<div>${msg.message_text || 'Sem texto'}</div>` :
+                                `<div><strong>Mídia:</strong> ${msg.media_url}</div>
+                                 ${msg.message_text ? `<div><strong>Legenda:</strong> ${msg.message_text}</div>` : ''}`
+                            }
+                        </div>
+                        
+                        <div class="next-run">
+                            <strong>Próximo envio:</strong> ${nextRun}
+                        </div>
+                        
+                        <div class="schedule-actions">
+                            <button class="schedule-btn toggle ${msg.is_active ? 'active' : ''}" 
+                                    onclick="toggleScheduledMessage('${msg.id}', ${!msg.is_active})">
+                                ${msg.is_active ? '⏸️ Pausar' : '▶️ Ativar'}
+                            </button>
+                            <button class="schedule-btn delete" onclick="deleteScheduledMessage('${msg.id}')">
+                                🗑️ Excluir
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            container.innerHTML = messagesHtml;
+        }
+        
+        // Get message type icon
+        function getMessageTypeIcon(type) {
+            const icons = {
+                text: '📝',
+                image: '🖼️',
+                audio: '🎵',
+                video: '🎥'
+            };
+            return icons[type] || '📝';
+        }
+        
+        // Get schedule info text
+        function getScheduleInfoText(msg) {
+            if (msg.schedule_type === 'once') {
+                return `📅 ${new Date(msg.schedule_date).toLocaleDateString('pt-BR')}`;
+            } else if (msg.schedule_type === 'weekly') {
+                const days = JSON.parse(msg.schedule_days || '[]');
+                const dayNames = {
+                    monday: 'Seg', tuesday: 'Ter', wednesday: 'Qua',
+                    thursday: 'Qui', friday: 'Sex', saturday: 'Sáb', sunday: 'Dom'
+                };
+                const dayLabels = days.map(day => dayNames[day] || day).join(', ');
+                return `🔄 Toda semana: ${dayLabels}`;
+            }
+            return 'Agendamento não definido';
+        }
+        
+        // Toggle scheduled message active/inactive
+        async function toggleScheduledMessage(messageId, activate) {
+            try {
+                const response = await fetch(`/api/scheduled-messages/${messageId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        is_active: activate
+                    })
+                });
+                
+                if (response.ok) {
+                    loadScheduledMessages(); // Reload messages
+                } else {
+                    throw new Error('Erro ao atualizar mensagem');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao atualizar mensagem:', error);
+                alert(`❌ Erro ao atualizar mensagem: ${error.message}`);
+            }
+        }
+        
+        // Delete scheduled message
+        async function deleteScheduledMessage(messageId) {
+            if (!confirm('❌ Tem certeza que deseja excluir esta mensagem programada?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/scheduled-messages/${messageId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    loadScheduledMessages(); // Reload messages
+                    alert('✅ Mensagem programada excluída!');
+                } else {
+                    throw new Error('Erro ao excluir mensagem');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao excluir mensagem:', error);
+                alert(`❌ Erro ao excluir mensagem: ${error.message}`);
+            }
+        }
+        
+        // Filter scheduled messages
+        function filterScheduledMessages() {
+            const searchTerm = document.getElementById('searchScheduledMessages').value.toLowerCase();
+            const messageCards = document.querySelectorAll('.scheduled-message-card');
+            
+            messageCards.forEach(card => {
+                const text = card.textContent.toLowerCase();
+                if (text.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
     </script>
 </body>
 </html>'''
