@@ -351,7 +351,12 @@ const fs = require('fs-extra')
 const path = require('path')
 
 const app = express()
-app.use(cors())
+app.use(cors({
+  origin: '*',
+  credentials: true,
+  methods: ['*'],
+  allowedHeaders: ['*'],
+}))
 app.use(express.json())
 
 const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8001'

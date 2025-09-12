@@ -14,7 +14,7 @@ const app = express();
 
 // Allow requests from any origin
 app.use(cors({
-    origin: true,
+    origin: '*',
     credentials: true,
     methods: ['*'],
     allowedHeaders: ['*']
