@@ -7066,7 +7066,7 @@ async function connectInstance(instanceId) {
                 setTimeout(async () => {
                     try {
                         const fetch = (await import('node-fetch')).default;
-                        await fetch(`http://localhost:8889/api/whatsapp/connected`, {
+                        await fetch(`${process.env.WHATSFLOW_API_URL || 'http://localhost:8889'}/api/whatsapp/connected`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
