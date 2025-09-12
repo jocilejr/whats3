@@ -6003,7 +6003,7 @@ HTML_APP = '''<!DOCTYPE html>
             }
             
             try {
-                const response = await fetch(`/api/scheduled-messages/${messageId}`, {
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/scheduled-messages/${messageId}`, {
                     method: 'DELETE'
                 });
                 
