@@ -12,8 +12,8 @@ const app = express();
 app.use(cors({
     origin: true,
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+    methods: ['*'],
+    allowedHeaders: ['*']
 }));
 app.use(express.json());
 
@@ -25,7 +25,7 @@ let qrUpdateInterval = null;
 // QR Code auto-refresh every 30 seconds (WhatsApp QR expires after 60s)
 const startQRRefresh = (instanceId) => {
     if (qrUpdateInterval) clearInterval(qrUpdateInterval);
-    
+
     qrUpdateInterval = setInterval(() => {
         const instance = instances.get(instanceId);
         if (instance && !instance.connected && instance.connecting) {
@@ -45,15 +45,15 @@ const stopQRRefresh = () => {
 async function connectInstance(instanceId) {
     try {
         console.log(`🔄 Iniciando conexão para instância: ${instanceId}`);
-        
+
         // Create instance directory
         const authDir = `./auth_${instanceId}`;
         if (!fs.existsSync(authDir)) {
             fs.mkdirSync(authDir, { recursive: true });
         }
-        
+
         const { state, saveCreds } = await useMultiFileAuthState(authDir);
-        
+
         const sock = makeWASocket({
             auth: state,
             browser: ['WhatsFlow', 'Desktop', '1.0.0'],
@@ -80,33 +80,33 @@ async function connectInstance(instanceId) {
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
             const instance = instances.get(instanceId);
-            
+
             if (qr) {
                 console.log(`📱 Novo QR Code gerado para instância: ${instanceId}`);
                 currentQR = qr;
                 instance.qr = qr;
-                
+
                 // Manual QR display in terminal (since printQRInTerminal is deprecated)
                 try {
                     qrTerminal.generate(qr, { small: true });
                 } catch (err) {
                     console.log('⚠️ QR Terminal não disponível:', err.message);
                 }
-                
+
                 startQRRefresh(instanceId);
             }
-            
+
             if (connection === 'close') {
                 const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
                 const reason = lastDisconnect?.error?.output?.statusCode || 'unknown';
-                
+
                 console.log(`🔌 Instância ${instanceId} desconectada. Razão: ${reason}, Reconectar: ${shouldReconnect}`);
-                
+
                 instance.connected = false;
                 instance.connecting = false;
                 instance.user = null;
                 stopQRRefresh();
-                
+
                 // Implement robust reconnection logic
                 if (shouldReconnect) {
                     if (reason === DisconnectReason.restartRequired) {
@@ -138,7 +138,7 @@ async function connectInstance(instanceId) {
                         console.log('⚠️ Erro ao limpar arquivos de auth:', err.message);
                     }
                 }
-                
+
                 // Notify backend about disconnection
                 try {
                     const fetch = (await import('node-fetch')).default;
@@ -153,7 +153,7 @@ async function connectInstance(instanceId) {
                 } catch (err) {
                     console.log('⚠️ Não foi possível notificar desconexão:', err.message);
                 }
-                
+
             } else if (connection === 'open') {
                 console.log(`✅ Instância ${instanceId} conectada com SUCESSO!`);
                 instance.connected = true;
@@ -162,7 +162,7 @@ async function connectInstance(instanceId) {
                 instance.lastSeen = new Date();
                 currentQR = null;
                 stopQRRefresh();
-                
+
                 // Get user info
                 instance.user = {
                     id: sock.user.id,
@@ -170,9 +170,9 @@ async function connectInstance(instanceId) {
                     profilePictureUrl: null,
                     phone: sock.user.id.split(':')[0]
                 };
-                
+
                 console.log(`👤 Usuário conectado: ${instance.user.name} (${instance.user.phone})`);
-                
+
                 // Try to get profile picture
                 try {
                     const profilePic = await sock.profilePictureUrl(sock.user.id, 'image');
@@ -181,21 +181,21 @@ async function connectInstance(instanceId) {
                 } catch (err) {
                     console.log('⚠️ Não foi possível obter foto do perfil');
                 }
-                
+
                 // Wait a bit before importing chats to ensure connection is stable
                 setTimeout(async () => {
                     try {
                         console.log('📥 Importando conversas existentes...');
-                        
+
                         // Get all chats
                         const chats = await sock.getChats();
                         console.log(`📊 ${chats.length} conversas encontradas`);
-                        
+
                         // Process chats in batches to avoid overwhelming the system
                         const batchSize = 20;
                         for (let i = 0; i < chats.length; i += batchSize) {
                             const batch = chats.slice(i, i + batchSize);
-                            
+
                             // Send batch to Python backend
                             const fetch = (await import('node-fetch')).default;
                             await fetch('http://localhost:8889/api/chats/import', {
@@ -209,20 +209,20 @@ async function connectInstance(instanceId) {
                                     totalBatches: Math.ceil(chats.length / batchSize)
                                 })
                             });
-                            
+
                             console.log(`📦 Lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(chats.length / batchSize)} enviado`);
-                            
+
                             // Small delay between batches
                             await new Promise(resolve => setTimeout(resolve, 1000));
                         }
-                        
+
                         console.log('✅ Importação de conversas concluída');
-                        
+
                     } catch (err) {
                         console.log('⚠️ Erro ao importar conversas:', err.message);
                     }
                 }, 5000); // Wait 5 seconds after connection
-                
+
                 // Send connected notification to Python backend
                 setTimeout(async () => {
                     try {
@@ -241,7 +241,7 @@ async function connectInstance(instanceId) {
                         console.log('⚠️ Erro ao notificar backend:', err.message);
                     }
                 }, 2000);
-                
+
             } else if (connection === 'connecting') {
                 console.log(`🔄 Conectando instância ${instanceId}...`);
                 instance.connecting = true;
@@ -250,27 +250,27 @@ async function connectInstance(instanceId) {
         });
 
         sock.ev.on('creds.update', saveCreds);
-        
+
         // Handle incoming messages with better error handling
         sock.ev.on('messages.upsert', async (m) => {
             const messages = m.messages;
-            
+
             for (const message of messages) {
                 if (!message.key.fromMe && message.message) {
                     const from = message.key.remoteJid;
-                    const messageText = message.message.conversation || 
-                                      message.message.extendedTextMessage?.text || 
-                                      'Mídia recebida';
-                    
+                    const messageText = message.message.conversation ||
+                        message.message.extendedTextMessage?.text ||
+                        'Mídia recebida';
+
                     // Extract contact name from WhatsApp
                     const pushName = message.pushName || '';
                     const contact = await sock.onWhatsApp(from);
                     const contactName = pushName || contact[0]?.name || '';
-                    
+
                     console.log(`📥 Nova mensagem na instância ${instanceId}`);
                     console.log(`👤 Contato: ${contactName || from.split('@')[0]} (${from.split('@')[0]})`);
                     console.log(`💬 Mensagem: ${messageText.substring(0, 50)}...`);
-                    
+
                     // Send to Python backend with retry logic
                     let retries = 3;
                     while (retries > 0) {
@@ -290,7 +290,7 @@ async function connectInstance(instanceId) {
                                     messageType: message.message.conversation ? 'text' : 'media'
                                 })
                             });
-                            
+
                             if (response.ok) {
                                 break; // Success, exit retry loop
                             } else {
@@ -314,7 +314,7 @@ async function connectInstance(instanceId) {
             if (instance && instance.connected && instance.sock) {
                 instance.lastSeen = new Date();
                 // Send heartbeat
-                instance.sock.sendPresenceUpdate('available').catch(() => {});
+                instance.sock.sendPresenceUpdate('available').catch(() => { });
             }
         }, 60000); // Every minute
 
@@ -331,7 +331,7 @@ async function connectInstance(instanceId) {
 // API Routes with better error handling
 app.get('/status/:instanceId?', (req, res) => {
     const { instanceId } = req.params;
-    
+
     if (instanceId) {
         const instance = instances.get(instanceId);
         if (instance) {
@@ -369,7 +369,7 @@ app.get('/status/:instanceId?', (req, res) => {
 app.get('/qr/:instanceId', (req, res) => {
     const { instanceId } = req.params;
     const instance = instances.get(instanceId);
-    
+
     if (instance && instance.qr) {
         res.json({
             qr: instance.qr,
@@ -389,7 +389,7 @@ app.get('/qr/:instanceId', (req, res) => {
 
 app.post('/connect/:instanceId', (req, res) => {
     const { instanceId } = req.params;
-    
+
     const instance = instances.get(instanceId);
     if (!instance || (!instance.connected && !instance.connecting)) {
         connectInstance(instanceId || 'default');
@@ -404,7 +404,7 @@ app.post('/connect/:instanceId', (req, res) => {
 app.post('/disconnect/:instanceId', (req, res) => {
     const { instanceId } = req.params;
     const instance = instances.get(instanceId);
-    
+
     if (instance && instance.sock) {
         try {
             instance.sock.logout();
@@ -422,26 +422,26 @@ app.post('/disconnect/:instanceId', (req, res) => {
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
     const { to, message, type = 'text' } = req.body;
-    
+
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
         return res.status(400).json({ error: 'Instância não conectada', instanceId: instanceId });
     }
-    
+
     try {
         const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
-        
+
         if (type === 'text') {
             await instance.sock.sendMessage(jid, { text: message });
         } else if (type === 'image' && req.body.imageData) {
             // Handle image sending (base64)
             const buffer = Buffer.from(req.body.imageData, 'base64');
-            await instance.sock.sendMessage(jid, { 
+            await instance.sock.sendMessage(jid, {
                 image: buffer,
                 caption: message || ''
             });
         }
-        
+
         console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
         res.json({ success: true, instanceId: instanceId });
     } catch (error) {
@@ -453,48 +453,48 @@ app.post('/send/:instanceId', async (req, res) => {
 // Groups endpoint with robust error handling  
 app.get('/groups/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    
+
     try {
         const instance = instances.get(instanceId);
         if (!instance || !instance.connected || !instance.sock) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 success: false,
                 error: `Instância ${instanceId} não está conectada`,
                 instanceId: instanceId,
                 groups: []
             });
         }
-        
+
         console.log(`📥 Buscando grupos para instância: ${instanceId}`);
-        
+
         // Multiple methods to get groups
         let groups = [];
-        
+
         try {
             // Method 1: Get group metadata
             const groupIds = await instance.sock.groupFetchAllParticipating();
             console.log(`📊 Encontrados ${Object.keys(groupIds).length} grupos via groupFetchAllParticipating`);
-            
+
             for (const [groupId, groupData] of Object.entries(groupIds)) {
                 groups.push({
                     id: groupId,
                     name: groupData.subject || 'Grupo sem nome',
                     description: groupData.desc || '',
                     participants: groupData.participants ? groupData.participants.length : 0,
-                    admin: groupData.participants ? 
-                           groupData.participants.some(p => p.admin && p.id === instance.user?.id) : false,
+                    admin: groupData.participants ?
+                        groupData.participants.some(p => p.admin && p.id === instance.user?.id) : false,
                     created: groupData.creation || null
                 });
             }
         } catch (error) {
             console.log(`⚠️ Método 1 falhou: ${error.message}`);
-            
+
             try {
                 // Method 2: Get chats and filter groups
                 const chats = await instance.sock.getChats();
                 const groupChats = chats.filter(chat => chat.id.endsWith('@g.us'));
                 console.log(`📊 Encontrados ${groupChats.length} grupos via getChats`);
-                
+
                 groups = groupChats.map(chat => ({
                     id: chat.id,
                     name: chat.name || chat.subject || 'Grupo sem nome',
@@ -509,14 +509,14 @@ app.get('/groups/:instanceId', async (req, res) => {
                 }));
             } catch (error2) {
                 console.log(`⚠️ Método 2 falhou: ${error2.message}`);
-                
+
                 // Method 3: Simple fallback - return empty with proper structure
                 groups = [];
             }
         }
-        
+
         console.log(`✅ Retornando ${groups.length} grupos para instância ${instanceId}`);
-        
+
         res.json({
             success: true,
             instanceId: instanceId,
@@ -524,7 +524,7 @@ app.get('/groups/:instanceId', async (req, res) => {
             count: groups.length,
             timestamp: new Date().toISOString()
         });
-        
+
     } catch (error) {
         console.error(`❌ Erro ao buscar grupos para instância ${instanceId}:`, error);
         res.status(500).json({
@@ -540,7 +540,7 @@ app.get('/groups/:instanceId', async (req, res) => {
 app.get('/health', (req, res) => {
     const connectedInstances = Array.from(instances.values()).filter(i => i.connected).length;
     const connectingInstances = Array.from(instances.values()).filter(i => i.connecting).length;
-    
+
     res.json({
         status: 'running',
         instances: {
