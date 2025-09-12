@@ -1,0 +1,69 @@
+{
+  "timestamp": "2025-09-12T18:10:20.680789",
+  "total_tests": 5,
+  "passed_tests": 5,
+  "success_rate": 100.0,
+  "duration": 0.02868056297302246,
+  "detailed_results": [
+    {
+      "test": "Baileys Groups Endpoint",
+      "success": true,
+      "message": "Groups endpoint properly handles unconnected instances",
+      "timestamp": "2025-09-12T18:10:20.658101",
+      "details": {
+        "status_code": 400,
+        "error_message": "Inst\u00e2ncia test_instance_123 n\u00e3o est\u00e1 conectada",
+        "endpoint": "/groups/test_instance_123"
+      }
+    },
+    {
+      "test": "GET Campaign Groups",
+      "success": true,
+      "message": "Successfully retrieved campaign groups",
+      "timestamp": "2025-09-12T18:10:20.663853",
+      "details": {
+        "campaign_id": "7342f412-303c-4a7a-a1a3-8963e96f63ad",
+        "groups_count": 2
+      }
+    },
+    {
+      "test": "POST Campaign Groups",
+      "success": true,
+      "message": "Successfully added groups to campaign",
+      "timestamp": "2025-09-12T18:10:20.670495",
+      "details": {
+        "campaign_id": "7342f412-303c-4a7a-a1a3-8963e96f63ad"
+      }
+    },
+    {
+      "test": "GET Scheduled Messages",
+      "success": true,
+      "message": "Successfully retrieved scheduled messages",
+      "timestamp": "2025-09-12T18:10:20.675556",
+      "details": {
+        "campaign_id": "7342f412-303c-4a7a-a1a3-8963e96f63ad",
+        "messages_count": 1
+      }
+    },
+    {
+      "test": "GET Instances",
+      "success": true,
+      "message": "Successfully retrieved instances",
+      "timestamp": "2025-09-12T18:10:20.677951",
+      "details": {
+        "instances_count": 3
+      }
+    },
+    {
+      "test": "CORS Configuration",
+      "success": true,
+      "message": "CORS is properly configured for cross-origin requests",
+      "timestamp": "2025-09-12T18:10:20.680654",
+      "details": {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "*",
+        "access-control-allow-headers": "*"
+      }
+    }
+  ]
+}
