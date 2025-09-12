@@ -213,6 +213,18 @@ backend:
         agent: "testing"
         comment: "🎯 VALIDAÇÃO FINAL APÓS CORREÇÕES: ✅ SQLite WAL mode ATIVO - journal_mode=wal ✅ ORDER BY created_at queries FUNCIONANDO em todas tabelas ✅ Database concurrency TESTADO - 5 conexões simultâneas OK ✅ Schema constraints RESOLVIDOS - todas colunas created_at presentes ✅ Data integrity PRESERVADA - 3 contatos, 5 mensagens, 11 instâncias ✅ QR code generation ESTÁVEL - QR real gerado com 60s expiry ✅ Baileys integration FUNCIONANDO - porta 3002 ativa ✅ 14/14 testes backend PASSARAM (100% success rate) ✅ TODOS PROBLEMAS DE DATABASE DEFINITIVAMENTE RESOLVIDOS!"
 
+  - task: "Message Scheduling System"
+    implemented: true
+    working: false
+    file: "/app/whatsflow-real.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "main"
+        comment: "🚀 SISTEMA DE AGENDAMENTO IMPLEMENTADO COM TODAS AS FUNCIONALIDADES SOLICITADAS! ✅ INTERFACE REFORMULADA: Nova seção 'Programar Mensagens' na aba grupos com botões 'Programar Mensagem' e 'Ver Programações' ✅ AGENDAMENTO COMPLETO: Suporte a envio único (data/hora) e recorrente semanal (dias da semana) ✅ MULTIMÍDIA TOTAL: Aceita texto, imagem, áudio, vídeo via links externos ✅ PREVIEW INTELIGENTE: Renderização automática de mídia com embed (img, video, audio) ✅ TIMEZONE BRASIL: Utiliza pytz para horário de Brasília (UTC-3) ✅ SCHEDULER AUTOMATICO: MessageScheduler em background verificando a cada 30s ✅ APIS COMPLETAS: CRUD /api/scheduled-messages (GET/POST/PUT/DELETE) ✅ DATABASE NOVA: Tabelas scheduled_messages e scheduled_message_groups ✅ SISTEMA PRONTO PARA TESTE - aguardando validação de funcionamento"
+
 frontend:
   - task: "Interface WhatsFlow Real"
     implemented: true
