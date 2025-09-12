@@ -31,7 +31,7 @@ except ImportError:
 # Configurações
 DB_FILE = "whatsflow.db"
 PORT = 8889
-BAILEYS_PORT = 3002
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:3002")
 WEBSOCKET_PORT = 8890
 
 # WebSocket clients management
@@ -400,7 +400,7 @@ class WhatsFlowHandler(BaseHTTPRequestHandler):
             import urllib.request
             
             req = urllib.request.Request(
-                f'http://localhost:{BAILEYS_PORT}/connect/{instance_id}',
+                f'{API_BASE_URL}/connect/{instance_id}',
                 method='POST'
             )
             
@@ -434,7 +434,7 @@ class WhatsFlowHandler(BaseHTTPRequestHandler):
     def handle_whatsapp_status(self, instance_id=None):
         """Get WhatsApp connection status"""
         try:
-            url = f'http://localhost:{BAILEYS_PORT}/status'
+            url = f'{API_BASE_URL}/status'
             if instance_id:
                 url += f'/{instance_id}'
             
@@ -472,7 +472,7 @@ class WhatsFlowHandler(BaseHTTPRequestHandler):
     def handle_whatsapp_qr(self, instance_id=None):
         """Get QR code for WhatsApp connection"""
         try:
-            url = f'http://localhost:{BAILEYS_PORT}/qr'
+            url = f'{API_BASE_URL}/qr'
             if instance_id:
                 url += f'/{instance_id}'
             
@@ -671,7 +671,7 @@ class WhatsFlowHandler(BaseHTTPRequestHandler):
             }).encode()
             
             req = urllib.request.Request(
-                f'http://localhost:{BAILEYS_PORT}/send',
+                f'{API_BASE_URL}/send',
                 data=send_data,
                 headers={'Content-Type': 'application/json'},
                 method='POST'
@@ -1047,7 +1047,7 @@ class BaileysManager:
         try:
             # Check if Baileys service is already running
             import urllib.request
-            req = urllib.request.Request(f'http://localhost:{BAILEYS_PORT}/status')
+            req = urllib.request.Request(f'{API_BASE_URL}/status')
             with urllib.request.urlopen(req, timeout=2) as response:
                 print("✅ Baileys service já está rodando")
                 return True
@@ -1075,7 +1075,7 @@ def main():
         print(f"✅ WhatsFlow Professional rodando em:")
         print(f"   📱 Interface: http://localhost:{PORT}")
         print(f"   🔌 WebSocket: ws://localhost:{WEBSOCKET_PORT}")
-        print(f"   📡 Baileys: http://localhost:{BAILEYS_PORT}")
+        print(f"   📡 Baileys: {API_BASE_URL}")
         print("\n🎉 Sistema pronto para uso!")
         print("   • WebSocket para atualizações em tempo real")
         print("   • Design profissional estilo WhatsApp Web")

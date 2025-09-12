@@ -7,7 +7,7 @@ import MessagesCenter from './components/MessagesCenter';
 import WhatsAppInstances from './components/WhatsAppInstances';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const BAILEYS_URL = process.env.REACT_APP_BAILEYS_URL;
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 const API = `${BACKEND_URL}/api`;
 
 // QR Code Component
@@ -109,7 +109,7 @@ const WhatsAppConnection = () => {
 
   const simulateConnection = async () => {
     try {
-      const response = await axios.post('http://localhost:3001/demo/connect');
+      const response = await axios.post(`${API_BASE_URL}/demo/connect`);
       if (response.data.success) {
         await checkStatus();
       }
@@ -347,11 +347,11 @@ function App() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const r = await fetch(`${BAILEYS_URL}/health`);
+        const r = await fetch(`${API_BASE_URL}/health`);
         if (!r.ok) throw new Error();
         setBaileysHealthy(true);
       } catch {
-        alert(`Serviço Baileys indisponível em ${BAILEYS_URL}`);
+        alert(`Serviço indisponível em ${API_BASE_URL}`);
       }
     };
     checkHealth();
