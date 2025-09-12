@@ -102,7 +102,13 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Preciso que o sistema seja funcional, onde eu possa conectar meu numero, as mensagens aparecerem na aba de mensagens, importar os contatos para a area de contatos, os botões com webhooks. Já quero definitivamente usar a plataforma"
+user_problem_statement: "Este sistema está completamente funcional, tanto na aba de instancias, de mensagens e de grupos. Não mexa no que está funcionando.
+Quero que reformule a função de programar mensagens na aba de grupos. QUero que eu consiga programar uma mensagem em um horario especifico e o servidor fazer a requisição no momento agendado para o baileys, horario do servidor é horario de brasilia. 
+Deve ser aceito mensagens de audio, texto, video e imagem nas mensagens.
+o arquivo não vai ficar salvo no servidor, vou disponibilizar um link externo, quero apenas uma previa do arquivo e da mensagem programada.
+Deve haver um outro botão que é 'Ver Programações' onde eu consiga visualizar tudo que foi programado no servidor.
+Quero apenas um MVP, pois estou com poucos creditos. Não precisa fazer algo bem acabado. Quero algo funcional.
+Lembrando que não uso localhost, e sim http://78.46.250.112:8889/ para acessar a plataforma."
 
 backend:
   - task: "WhatsFlow Real - Sistema Completo"
