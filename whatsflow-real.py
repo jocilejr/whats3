@@ -4874,8 +4874,11 @@ HTML_APP = '''<!DOCTYPE html>
 </html>'''
 
 # Inject Baileys URL from environment into frontend
-# window.BAILEYS_URL pode ser definido antes do script para apontar para outro host/porta
-BAILEYS_ENV_URL = os.environ.get("BAILEYS_URL", "")
+# If BAILEYS_URL isn't provided, default to the local Baileys service address
+BAILEYS_HOST = os.environ.get("BAILEYS_HOST", "localhost")
+BAILEYS_ENV_URL = os.environ.get(
+    "BAILEYS_URL", f"http://{BAILEYS_HOST}:{BAILEYS_PORT}"
+)
 HTML_APP = HTML_APP.replace(
     "<body>",
     f"<body><script>window.BAILEYS_URL = {json.dumps(BAILEYS_ENV_URL)};</script>",
