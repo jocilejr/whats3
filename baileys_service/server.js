@@ -1,10 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+const { MongoClient, ObjectId } = require('mongodb');
 const { DisconnectReason, useMultiFileAuthState, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const makeWASocket = require('@whiskeysockets/baileys').default;
 const qrTerminal = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 
@@ -17,10 +19,74 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// MongoDB connection
+const mongoUrl = process.env.MONGO_URL || 'mongodb://localhost:27017';
+const dbName = process.env.DB_NAME || 'whatsflow';
+const mongoClient = new MongoClient(mongoUrl, { useUnifiedTopology: true });
+let db;
+(async () => {
+    try {
+        await mongoClient.connect();
+        db = mongoClient.db(dbName);
+        console.log('🗄️ Connected to MongoDB');
+    } catch (err) {
+        console.error('❌ MongoDB connection error:', err.message);
+    }
+})();
+
+// API Router
+const apiRouter = express.Router();
+app.use('/api', apiRouter);
+
 // Global state management
 let instances = new Map(); // instanceId -> { sock, qr, connected, connecting, user }
 let currentQR = null;
 let qrUpdateInterval = null;
+
+// Database helper functions
+async function getOrCreateContact(phoneNumber, name = null, deviceId = 'whatsapp_1', deviceName = 'WhatsApp 1') {
+    if (!db) return null;
+    const contacts = db.collection('contacts');
+    const contact = await contacts.findOne({ phone_number: phoneNumber, device_id: deviceId });
+    if (contact) {
+        await contacts.updateOne({ phone_number: phoneNumber, device_id: deviceId }, { $set: { last_message_at: new Date() } });
+        contact.id = contact._id ? contact._id.toString() : contact.id;
+        delete contact._id;
+        return contact;
+    }
+    const contactData = {
+        phone_number: phoneNumber,
+        name: name || `Contact ${phoneNumber.slice(-4)}`,
+        device_id: deviceId,
+        device_name: deviceName,
+        created_at: new Date(),
+        last_message_at: new Date(),
+        tags: [],
+        is_active: true
+    };
+    const result = await contacts.insertOne(contactData);
+    contactData.id = result.insertedId.toString();
+    return contactData;
+}
+
+async function saveMessage({ contact_id, phone_number, message, direction, device_id = 'whatsapp_1', device_name = 'WhatsApp 1', message_id = null }) {
+    if (!db) return;
+    const messages = db.collection('messages');
+    const messageData = {
+        contact_id,
+        phone_number,
+        device_id,
+        device_name,
+        message,
+        direction,
+        timestamp: new Date(),
+        message_id,
+        delivered: false,
+        read: false
+    };
+    await messages.insertOne(messageData);
+    return messageData;
+}
 
 // QR Code auto-refresh every 30 seconds (WhatsApp QR expires after 60s)
 const startQRRefresh = (instanceId) => {
@@ -139,19 +205,24 @@ async function connectInstance(instanceId) {
                     }
                 }
 
-                // Notify backend about disconnection
+                // Update database about disconnection
                 try {
-                    const fetch = (await import('node-fetch')).default;
-                    await fetch('http://localhost:8889/api/whatsapp/disconnected', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            instanceId: instanceId,
-                            reason: reason
-                        })
-                    });
+                    if (db) {
+                        await db.collection('whatsapp_instances').updateOne(
+                            { id: instanceId },
+                            {
+                                $set: {
+                                    connected: false,
+                                    user: null,
+                                    last_connected_at: new Date(),
+                                    reason: reason
+                                }
+                            },
+                            { upsert: true }
+                        );
+                    }
                 } catch (err) {
-                    console.log('⚠️ Não foi possível notificar desconexão:', err.message);
+                    console.log('⚠️ Falha ao atualizar desconexão no banco:', err.message);
                 }
 
             } else if (connection === 'open') {
@@ -192,55 +263,30 @@ async function connectInstance(instanceId) {
                         console.log(`📊 ${chats.length} conversas encontradas`);
 
                         // Process chats in batches to avoid overwhelming the system
-                        const batchSize = 20;
-                        for (let i = 0; i < chats.length; i += batchSize) {
-                            const batch = chats.slice(i, i + batchSize);
-
-                            // Send batch to Python backend
-                            const fetch = (await import('node-fetch')).default;
-                            await fetch('http://localhost:8889/api/chats/import', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    instanceId: instanceId,
-                                    chats: batch,
-                                    user: instance.user,
-                                    batchNumber: Math.floor(i / batchSize) + 1,
-                                    totalBatches: Math.ceil(chats.length / batchSize)
-                                })
-                            });
-
-                            console.log(`📦 Lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(chats.length / batchSize)} enviado`);
-
-                            // Small delay between batches
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        }
-
-                        console.log('✅ Importação de conversas concluída');
-
+                        // Placeholder for future chat import handling if needed
                     } catch (err) {
                         console.log('⚠️ Erro ao importar conversas:', err.message);
                     }
                 }, 5000); // Wait 5 seconds after connection
 
-                // Send connected notification to Python backend
-                setTimeout(async () => {
-                    try {
-                        const fetch = (await import('node-fetch')).default;
-                        await fetch('http://localhost:8889/api/whatsapp/connected', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                instanceId: instanceId,
-                                user: instance.user,
-                                connectedAt: new Date().toISOString()
-                            })
-                        });
-                        console.log('✅ Backend notificado sobre a conexão');
-                    } catch (err) {
-                        console.log('⚠️ Erro ao notificar backend:', err.message);
+                // Update instance status in database
+                try {
+                    if (db) {
+                        await db.collection('whatsapp_instances').updateOne(
+                            { id: instanceId },
+                            {
+                                $set: {
+                                    connected: true,
+                                    user: instance.user,
+                                    last_connected_at: new Date()
+                                }
+                            },
+                            { upsert: true }
+                        );
                     }
-                }, 2000);
+                } catch (err) {
+                    console.log('⚠️ Erro ao atualizar status da instância:', err.message);
+                }
 
             } else if (connection === 'connecting') {
                 console.log(`🔄 Conectando instância ${instanceId}...`);
@@ -271,38 +317,25 @@ async function connectInstance(instanceId) {
                     console.log(`👤 Contato: ${contactName || from.split('@')[0]} (${from.split('@')[0]})`);
                     console.log(`💬 Mensagem: ${messageText.substring(0, 50)}...`);
 
-                    // Send to Python backend with retry logic
-                    let retries = 3;
-                    while (retries > 0) {
-                        try {
-                            const fetch = (await import('node-fetch')).default;
-                            const response = await fetch('http://localhost:8889/api/messages/receive', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    instanceId: instanceId,
-                                    from: from,
-                                    message: messageText,
-                                    pushName: pushName,
-                                    contactName: contactName,
-                                    timestamp: new Date().toISOString(),
-                                    messageId: message.key.id,
-                                    messageType: message.message.conversation ? 'text' : 'media'
-                                })
-                            });
-
-                            if (response.ok) {
-                                break; // Success, exit retry loop
-                            } else {
-                                throw new Error(`HTTP ${response.status}`);
-                            }
-                        } catch (err) {
-                            retries--;
-                            console.log(`❌ Erro ao enviar mensagem (tentativas restantes: ${retries}):`, err.message);
-                            if (retries > 0) {
-                                await new Promise(resolve => setTimeout(resolve, 2000));
-                            }
-                        }
+                    // Save contact and message directly to database
+                    try {
+                        const contact = await getOrCreateContact(
+                            from.split('@')[0],
+                            contactName,
+                            instanceId,
+                            instance.user?.name || 'WhatsApp'
+                        );
+                        await saveMessage({
+                            contact_id: contact.id,
+                            phone_number: from.split('@')[0],
+                            message: messageText,
+                            direction: 'incoming',
+                            device_id: instanceId,
+                            device_name: instance.user?.name || 'WhatsApp',
+                            message_id: message.key.id
+                        });
+                    } catch (err) {
+                        console.log('❌ Erro ao salvar mensagem no banco:', err.message);
                     }
                 }
             }
@@ -442,6 +475,25 @@ app.post('/send/:instanceId', async (req, res) => {
             });
         }
 
+        try {
+            const contact = await getOrCreateContact(
+                to,
+                null,
+                instanceId,
+                instance.user?.name || 'WhatsApp'
+            );
+            await saveMessage({
+                contact_id: contact.id,
+                phone_number: to,
+                message: message,
+                direction: 'outgoing',
+                device_id: instanceId,
+                device_name: instance.user?.name || 'WhatsApp'
+            });
+        } catch (err) {
+            console.log('⚠️ Erro ao salvar mensagem enviada:', err.message);
+        }
+
         console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
         res.json({ success: true, instanceId: instanceId });
     } catch (error) {
@@ -536,6 +588,159 @@ app.get('/groups/:instanceId', async (req, res) => {
     }
 });
 
+// -----------------------
+// REST API Routes (previously in Python backend)
+// -----------------------
+
+// Contacts
+apiRouter.get('/contacts', async (req, res) => {
+    try {
+        const contacts = await db.collection('contacts').find().toArray();
+        const result = contacts.map(c => {
+            c.id = c._id.toString();
+            delete c._id;
+            return c;
+        });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+apiRouter.get('/contacts/:contactId/messages', async (req, res) => {
+    const { contactId } = req.params;
+    try {
+        const messages = await db.collection('messages').find({ contact_id: contactId }).sort({ timestamp: 1 }).toArray();
+        res.json(messages);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// WhatsApp Instances
+apiRouter.get('/whatsapp/instances', async (req, res) => {
+    try {
+        const instancesDb = await db.collection('whatsapp_instances').find().toArray();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        for (const inst of instancesDb) {
+            inst.id = inst.id || inst._id?.toString();
+            if (inst._id) delete inst._id;
+            inst.contacts_count = await db.collection('contacts').countDocuments({ device_id: inst.device_id });
+            inst.messages_today = await db.collection('messages').countDocuments({ device_id: inst.device_id, timestamp: { $gte: today } });
+        }
+        res.json(instancesDb);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+apiRouter.post('/whatsapp/instances', async (req, res) => {
+    try {
+        const { name, device_name } = req.body;
+        const device_id = `whatsapp_${Math.random().toString(36).substring(2, 10)}`;
+        const instance = {
+            id: undefined,
+            name,
+            device_id,
+            device_name: device_name || name,
+            connected: false,
+            created_at: new Date()
+        };
+        const result = await db.collection('whatsapp_instances').insertOne(instance);
+        instance.id = result.insertedId.toString();
+        res.json({ success: true, instance });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+apiRouter.post('/whatsapp/instances/:instanceId/disconnect', async (req, res) => {
+    const { instanceId } = req.params;
+    try {
+        const result = await db.collection('whatsapp_instances').updateOne(
+            { id: instanceId },
+            { $set: { connected: false, user: null, last_connected_at: new Date() } }
+        );
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: 'Instance not found' });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+apiRouter.delete('/whatsapp/instances/:instanceId', async (req, res) => {
+    const { instanceId } = req.params;
+    try {
+        const result = await db.collection('whatsapp_instances').deleteOne({ id: instanceId });
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ error: 'Instance not found' });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Webhooks
+apiRouter.get('/webhooks', async (req, res) => {
+    try {
+        const webhooks = await db.collection('webhooks').find({ active: true }).toArray();
+        webhooks.forEach(w => { w.id = w._id.toString(); delete w._id; });
+        res.json(webhooks);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+apiRouter.post('/webhooks', async (req, res) => {
+    try {
+        const { name, url, description = '' } = req.body;
+        const webhook = {
+            name,
+            url,
+            description,
+            created_at: new Date(),
+            active: true
+        };
+        const result = await db.collection('webhooks').insertOne(webhook);
+        webhook.id = result.insertedId.toString();
+        res.json(webhook);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+apiRouter.delete('/webhooks/:webhookId', async (req, res) => {
+    const { webhookId } = req.params;
+    try {
+        const result = await db.collection('webhooks').updateOne({ _id: new ObjectId(webhookId) }, { $set: { active: false } });
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: 'Webhook not found' });
+        }
+        res.json({ message: 'Webhook deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+apiRouter.post('/webhooks/trigger', async (req, res) => {
+    const { webhook_url, data } = req.body;
+    try {
+        const fetch = (await import('node-fetch')).default;
+        const response = await fetch(webhook_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        res.json({ message: 'Webhook triggered', status: response.status });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     const connectedInstances = Array.from(instances.values()).filter(i => i.connected).length;
@@ -553,9 +758,9 @@ app.get('/health', (req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Baileys service rodando na porta ${PORT}`);
+    console.log(`🚀 Service rodando na porta ${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
     console.log('⏳ Aguardando comandos para conectar instâncias...');
 });
