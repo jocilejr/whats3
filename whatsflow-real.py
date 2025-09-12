@@ -2797,6 +2797,148 @@ HTML_APP = '''<!DOCTYPE html>
             </div>
         </div>
     </div>
+    
+    <!-- Schedule Message Modal -->
+    <div id="scheduleMessageModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3>⏰ Programar Mensagem para Grupos</h3>
+            
+            <div style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Selecionar Instância:</label>
+                <select id="scheduleInstanceSelect" class="form-input" onchange="loadGroupsForSchedule()">
+                    <option value="">Selecione uma instância</option>
+                </select>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Selecionar Grupos:</label>
+                <div id="schedule-groups-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
+                    <div class="empty-state">
+                        <p>Selecione uma instância para ver os grupos</p>
+                    </div>
+                </div>
+                <div id="selected-schedule-groups" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;">
+                    <!-- Selected groups will appear here -->
+                </div>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Tipo de Mensagem:</label>
+                <select id="scheduleMessageType" class="form-input" onchange="handleMessageTypeChange()">
+                    <option value="text">📝 Texto</option>
+                    <option value="image">🖼️ Imagem</option>
+                    <option value="audio">🎵 Áudio</option>
+                    <option value="video">🎥 Vídeo</option>
+                </select>
+            </div>
+            
+            <div id="textMessageDiv" style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Mensagem de Texto:</label>
+                <textarea id="scheduleMessageContent" class="form-input" 
+                          placeholder="Digite sua mensagem..." 
+                          style="height: 100px; resize: vertical;" required></textarea>
+            </div>
+            
+            <div id="mediaMessageDiv" style="margin: 20px 0; display: none;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">URL da Mídia:</label>
+                <input type="url" id="scheduleMediaUrl" class="form-input" 
+                       placeholder="https://exemplo.com/arquivo.jpg" 
+                       onchange="previewMedia()">
+                <div id="mediaPreview" style="margin-top: 15px; display: none;">
+                    <!-- Media preview will appear here -->
+                </div>
+                <div style="margin-top: 10px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Legenda/Texto (opcional):</label>
+                    <textarea id="scheduleMediaCaption" class="form-input" 
+                              placeholder="Adicione uma legenda ou texto..." 
+                              style="height: 60px; resize: vertical;"></textarea>
+                </div>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Tipo de Agendamento:</label>
+                <select id="scheduleTypeSelect" class="form-input" onchange="handleScheduleTypeChange()">
+                    <option value="once">📅 Envio Único</option>
+                    <option value="weekly">📅 Semanal (Recorrente)</option>
+                </select>
+            </div>
+            
+            <div style="display: flex; gap: 15px; margin: 20px 0;">
+                <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Horário (Brasília):</label>
+                    <input type="time" id="scheduleTimeInput" class="form-input" required>
+                </div>
+                <div id="scheduleDateDiv" style="flex: 1;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Data:</label>
+                    <input type="date" id="scheduleDateInput" class="form-input" required>
+                </div>
+            </div>
+            
+            <div id="scheduleDaysDiv" style="margin: 20px 0; display: none;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 500;">Dias da Semana:</label>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="monday" name="scheduleWeekDays"> Segunda
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="tuesday" name="scheduleWeekDays"> Terça
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="wednesday" name="scheduleWeekDays"> Quarta
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="thursday" name="scheduleWeekDays"> Quinta
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="friday" name="scheduleWeekDays"> Sexta
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="saturday" name="scheduleWeekDays"> Sábado
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" value="sunday" name="scheduleWeekDays"> Domingo
+                    </label>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn" onclick="hideScheduleMessageModal()">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="createScheduledMessage()" style="flex: 1;">
+                    ⏰ Programar Mensagem
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scheduled Messages List Modal -->
+    <div id="scheduledMessagesModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <h3>📋 Mensagens Programadas</h3>
+            
+            <div style="margin: 20px 0;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="searchScheduledMessages" class="form-input" 
+                           placeholder="🔍 Buscar mensagens programadas..." 
+                           onkeyup="filterScheduledMessages()" style="flex: 1;">
+                    <button class="btn btn-primary" onclick="loadScheduledMessages()">
+                        🔄 Atualizar
+                    </button>
+                </div>
+            </div>
+            
+            <div id="scheduled-messages-list" style="margin: 20px 0; max-height: 500px; overflow-y: auto;">
+                <div class="loading">
+                    <div style="text-align: center; padding: 2rem;">🔄 Carregando mensagens programadas...</div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn btn-primary" onclick="hideScheduledMessagesModal()" style="flex: 1;">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const API_BASE_URL = window.API_BASE_URL || 'http://78.46.250.112:3002';
