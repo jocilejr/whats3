@@ -1,0 +1,98 @@
+{
+  "timestamp": "2025-09-12T18:08:45.123273",
+  "total_tests": 6,
+  "passed_tests": 4,
+  "success_rate": 66.66666666666666,
+  "duration": 0.1564028263092041,
+  "working_urls": {
+    "whatsflow": "http://localhost:8889",
+    "baileys": "http://localhost:3002"
+  },
+  "detailed_results": [
+    {
+      "test": "WhatsFlow Service Connectivity",
+      "success": true,
+      "message": "WhatsFlow Real accessible at http://localhost:8889",
+      "timestamp": "2025-09-12T18:08:44.971648",
+      "details": {
+        "status_code": 200,
+        "url": "http://localhost:8889"
+      }
+    },
+    {
+      "test": "Baileys Service Connectivity",
+      "success": true,
+      "message": "Baileys service accessible at http://localhost:3002",
+      "timestamp": "2025-09-12T18:08:44.981017",
+      "details": {
+        "status": "running",
+        "uptime": 716.522145824,
+        "url": "http://localhost:3002"
+      }
+    },
+    {
+      "test": "GET /api/campaigns",
+      "success": true,
+      "message": "Successfully retrieved 5 campaigns",
+      "timestamp": "2025-09-12T18:08:44.984031",
+      "details": {
+        "campaign_count": 5,
+        "campaign_names": [
+          "Campanha Teste",
+          "Campanha Teste",
+          "Campanha Teste",
+          "Campanha Teste",
+          "Test Campaign Debug"
+        ]
+      }
+    },
+    {
+      "test": "POST /api/campaigns",
+      "success": false,
+      "message": "Failed to create campaign: 200",
+      "timestamp": "2025-09-12T18:08:44.990238",
+      "details": {
+        "status_code": 200,
+        "response": "{\n  \"success\": true,\n  \"campaign_id\": \"4a9d2400-62d5-411f-a40a-587fa6f89e69\",\n  \"message\": \"Campanha criada com sucesso\"\n}"
+      }
+    },
+    {
+      "test": "Dynamic URL Configuration",
+      "success": true,
+      "message": "URLs are using dynamic configuration (window.location.origin)",
+      "timestamp": "2025-09-12T18:08:44.993148",
+      "details": {
+        "has_whatsflow_dynamic_config": true,
+        "has_api_base_config": true
+      }
+    },
+    {
+      "test": "External IP Access",
+      "success": false,
+      "message": "Cannot access system via external IP: HTTPConnectionPool(host='78.46.250.112', port=8889): Max retries exceeded with url: /api/campaigns (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0xfff8513f2f90>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "timestamp": "2025-09-12T18:08:45.108783",
+      "details": {
+        "external_url": "http://78.46.250.112:8889",
+        "error_type": "ConnectionError"
+      }
+    },
+    {
+      "test": "UPDATE Campaign",
+      "success": true,
+      "message": "Successfully updated campaign",
+      "timestamp": "2025-09-12T18:08:45.117965",
+      "details": {
+        "campaign_id": "4a9d2400-62d5-411f-a40a-587fa6f89e69"
+      }
+    },
+    {
+      "test": "DELETE Campaign",
+      "success": true,
+      "message": "Successfully deleted campaign",
+      "timestamp": "2025-09-12T18:08:45.123125",
+      "details": {
+        "campaign_id": "4a9d2400-62d5-411f-a40a-587fa6f89e69"
+      }
+    }
+  ]
+}
