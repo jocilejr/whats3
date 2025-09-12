@@ -9054,30 +9054,53 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
-            
+
             groups = data.get('groups', [])
             if not groups:
                 self.send_json_response({"error": "Nenhum grupo fornecido"}, 400)
                 return
-            
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
-            
-            # Remove existing groups for this campaign (replace)
-            cursor.execute("DELETE FROM campaign_groups WHERE campaign_id = ?", (campaign_id,))
-            
-            # Add new groups
+
+            # Validate that each group has required fields
             for group in groups:
-                group_id = str(uuid.uuid4())
-                instance_id = group.get('instance_id', 'default')  # Use default if not provided
-                cursor.execute("""
-                    INSERT INTO campaign_groups (id, campaign_id, group_id, group_name, instance_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (group_id, campaign_id, group['group_id'], group['group_name'], 
-                      instance_id, datetime.now(timezone.utc).isoformat()))
-            
-            conn.commit()
-            conn.close()
+                if 'group_id' not in group or 'group_name' not in group:
+                    self.send_json_response(
+                        {"error": "Cada grupo deve conter group_id e group_name"},
+                        400,
+                    )
+                    return
+
+            # Ensure database connection is properly closed
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+
+                # Remove existing groups for this campaign (replace)
+                cursor.execute(
+                    "DELETE FROM campaign_groups WHERE campaign_id = ?",
+                    (campaign_id,),
+                )
+
+                # Add new groups
+                for group in groups:
+                    group_id = str(uuid.uuid4())
+                    instance_id = group.get(
+                        'instance_id', 'default'
+                    )  # Use default if not provided
+                    cursor.execute(
+                        """
+                        INSERT INTO campaign_groups (id, campaign_id, group_id, group_name, instance_id, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            group_id,
+                            campaign_id,
+                            group['group_id'],
+                            group['group_name'],
+                            instance_id,
+                            datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
+
+                conn.commit()
             
             print(f"✅ {len(groups)} grupos adicionados à campanha {campaign_id}")
             self.send_json_response({
