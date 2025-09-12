@@ -6981,7 +6981,7 @@ async function connectInstance(instanceId) {
                 // Notify backend about disconnection
                 try {
                     const fetch = (await import('node-fetch')).default;
-                    await fetch(`http://localhost:8889/api/whatsapp/disconnected`, {
+                    await fetch(`${process.env.WHATSFLOW_API_URL || 'http://localhost:8889'}/api/whatsapp/disconnected`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
