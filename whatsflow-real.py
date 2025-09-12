@@ -5857,7 +5857,7 @@ HTML_APP = '''<!DOCTYPE html>
             container.innerHTML = '<div class="loading">🔄 Carregando mensagens programadas...</div>';
             
             try {
-                const response = await fetch('/api/scheduled-messages');
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/scheduled-messages`);
                 const messages = await response.json();
                 
                 renderScheduledMessages(messages);
