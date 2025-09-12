@@ -5800,7 +5800,7 @@ HTML_APP = '''<!DOCTYPE html>
                 
                 // Create scheduled message for each group
                 const promises = groupsToUse.map(group => {
-                    return fetch('/api/scheduled-messages', {
+                    return fetch(`${WHATSFLOW_API_URL}/api/scheduled-messages`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
