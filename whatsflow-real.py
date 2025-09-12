@@ -6076,7 +6076,9 @@ HTML_APP = '''<!DOCTYPE html>
         }
         
         // Create campaign
-        async function createCampaign() {
+        async function createCampaign(event) {
+            event.preventDefault();
+
             const name = document.getElementById('campaignName').value.trim();
             const description = document.getElementById('campaignDescription').value.trim();
             
@@ -6085,28 +6087,22 @@ HTML_APP = '''<!DOCTYPE html>
                 return;
             }
             
-            // Get selected instances
-            const selectedInstances = [];
-            document.querySelectorAll('#campaignInstancesList input[type="checkbox"]:checked').forEach(checkbox => {
-                selectedInstances.push(checkbox.value);
-            });
-            
-            if (selectedInstances.length === 0) {
-                alert('❌ Selecione pelo menos uma instância!');
-                return;
-            }
-            
+            const selectedInstances = Array.from(document.querySelectorAll('#campaignInstancesList input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
+
             try {
                 const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
+                    body: JSON.stringify(selectedInstances.length > 0 ? {
                         name: name,
                         description: description,
                         instances: selectedInstances,
                         status: 'active'
+                    } : {
+                        name: name,
+                        description: description
                     })
                 });
                 
@@ -6203,8 +6199,8 @@ HTML_APP = '''<!DOCTYPE html>
             document.getElementById('manageCampaignTitle').textContent = `🎯 ${campaignName}`;
             document.getElementById('manageCampaignModal').style.display = 'flex';
             
-            // Load campaign instances for group selection
-            loadCampaignInstancesForGroups(campaignId);
+            // Load all instances for group selection
+            loadCampaignInstancesForGroups();
             
             // Load existing campaign groups
             loadExistingCampaignGroups(campaignId);
@@ -6245,15 +6241,15 @@ HTML_APP = '''<!DOCTYPE html>
         }
         
         // Load campaign instances for group selection
-        async function loadCampaignInstancesForGroups(campaignId) {
+        async function loadCampaignInstancesForGroups() {
             const select = document.getElementById('campaignGroupsInstance');
             try {
-                const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${campaignId}/instances`);
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/instances`);
                 const instances = await response.json();
-                
+
                 select.innerHTML = '<option value="">Selecione uma instância</option>' +
                     instances.map(instance => `
-                        <option value="${instance.id}">${instance.name} (${instance.status})</option>
+                        <option value="${instance.id}">${instance.name} ${instance.connected ? '(Conectado)' : '(Desconectado)'}</option>
                     `).join('');
             } catch (error) {
                 select.innerHTML = '<option value="">Erro ao carregar instâncias</option>';
@@ -6274,13 +6270,18 @@ HTML_APP = '''<!DOCTYPE html>
             
             try {
                 const response = await fetch(`${window.API_BASE_URL}/groups/${instanceId}`);
-                const groups = await response.json();
-                
-                if (!groups || groups.length === 0) {
+                const result = await response.json();
+
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Erro ao carregar grupos');
+                }
+
+                const groups = result.groups || [];
+                if (groups.length === 0) {
                     container.innerHTML = '<div class="empty-state"><p>Nenhum grupo encontrado nesta instância</p></div>';
                     return;
                 }
-                
+
                 container.innerHTML = groups.map(group => `
                     <div class="group-item" onclick="toggleGroupSelection('${group.id}', '${group.name}', '${instanceId}')">
                         <input type="checkbox" id="group-${group.id}" onchange="event.stopPropagation()">
@@ -6291,7 +6292,8 @@ HTML_APP = '''<!DOCTYPE html>
                     </div>
                 `).join('');
             } catch (error) {
-                container.innerHTML = '<div class="empty-state"><p>Erro ao carregar grupos</p></div>';
+                console.error('❌ Erro ao carregar grupos:', error);
+                container.innerHTML = `<div class="empty-state"><p>Erro ao carregar grupos</p><p>${error.message}</p></div>`;
             }
         }
         
