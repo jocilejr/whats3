@@ -2487,39 +2487,18 @@ HTML_APP = '''<!DOCTYPE html>
         
         <!-- Groups Section - Sistema de Campanhas -->
         <div id="groups" class="section">
-            <!-- Campaigns Section - OCULTA (projeto anterior) -->
-            <div class="card" style="margin-bottom: 2rem; display: none;">
+            <!-- Campaigns Management Section -->
+            <div class="card" style="margin-bottom: 2rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h2>🎯 Campanhas de Marketing</h2>
+                    <h2>🎯 Gerenciar Campanhas</h2>
                     <button class="btn btn-primary" onclick="showCreateCampaignModal()">
-                        ➕ Criar Campanha
+                        ➕ Nova Campanha
                     </button>
                 </div>
                 
                 <div id="campaigns-container">
                     <div class="loading">
                         <div style="text-align: center; padding: 2rem;">🔄 Carregando campanhas...</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Message Scheduling Section -->
-            <div class="card" style="margin-bottom: 2rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h2>⏰ Programar Mensagens</h2>
-                    <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-secondary" onclick="showScheduledMessagesModal()">
-                            📋 Ver Programações
-                        </button>
-                        <button class="btn btn-primary" onclick="showScheduleMessageModal()">
-                            ⏰ Programar Mensagem
-                        </button>
-                    </div>
-                </div>
-                
-                <div id="scheduled-messages-preview" style="display: none;">
-                    <div class="scheduled-messages-grid" id="scheduled-messages-container">
-                        <!-- Scheduled messages will be loaded here -->
                     </div>
                 </div>
             </div>
