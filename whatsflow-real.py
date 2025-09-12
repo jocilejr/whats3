@@ -6009,6 +6009,167 @@ HTML_APP = '''<!DOCTYPE html>
                 }
             });
         }
+        
+        // Campaign Management Functions
+        let currentCampaignId = null;
+        let selectedCampaignGroups = [];
+        
+        // Show create campaign modal
+        function showCreateCampaignModal() {
+            document.getElementById('createCampaignModal').style.display = 'flex';
+            loadInstancesForCampaign();
+        }
+        
+        // Hide create campaign modal
+        function hideCreateCampaignModal() {
+            document.getElementById('createCampaignModal').style.display = 'none';
+            // Reset form
+            document.getElementById('campaignName').value = '';
+            document.getElementById('campaignDescription').value = '';
+        }
+        
+        // Load instances for campaign creation
+        async function loadInstancesForCampaign() {
+            const container = document.getElementById('campaignInstancesList');
+            try {
+                const response = await fetch('/api/instances');
+                const instances = await response.json();
+                
+                container.innerHTML = instances.map(instance => `
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <input type="checkbox" id="instance-${instance.id}" value="${instance.id}" style="margin-right: 8px;">
+                        <label for="instance-${instance.id}" style="flex: 1; cursor: pointer;">
+                            <strong>${instance.name}</strong>
+                            <span style="color: #666; font-size: 0.9rem; margin-left: 8px;">(${instance.status})</span>
+                        </label>
+                    </div>
+                `).join('');
+            } catch (error) {
+                container.innerHTML = '<p style="color: #ef4444;">Erro ao carregar instâncias</p>';
+            }
+        }
+        
+        // Create campaign
+        async function createCampaign() {
+            const name = document.getElementById('campaignName').value.trim();
+            const description = document.getElementById('campaignDescription').value.trim();
+            
+            if (!name) {
+                alert('❌ Nome da campanha é obrigatório!');
+                return;
+            }
+            
+            // Get selected instances
+            const selectedInstances = [];
+            document.querySelectorAll('#campaignInstancesList input[type="checkbox"]:checked').forEach(checkbox => {
+                selectedInstances.push(checkbox.value);
+            });
+            
+            if (selectedInstances.length === 0) {
+                alert('❌ Selecione pelo menos uma instância!');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/campaigns', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        description: description,
+                        instances: selectedInstances,
+                        status: 'active'
+                    })
+                });
+                
+                if (response.ok) {
+                    hideCreateCampaignModal();
+                    loadCampaigns();
+                    alert('✅ Campanha criada com sucesso!');
+                } else {
+                    alert('❌ Erro ao criar campanha');
+                }
+            } catch (error) {
+                console.error('❌ Erro ao criar campanha:', error);
+                alert('❌ Erro ao criar campanha');
+            }
+        }
+        
+        // Load campaigns
+        async function loadCampaigns() {
+            const container = document.getElementById('campaigns-container');
+            container.innerHTML = '<div class="loading">🔄 Carregando campanhas...</div>';
+            
+            try {
+                const response = await fetch('/api/campaigns');
+                const campaigns = await response.json();
+                
+                if (campaigns.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">🎯</div>
+                            <div class="empty-title">Nenhuma campanha criada ainda</div>
+                            <p>Crie sua primeira campanha para organizar mensagens e grupos</p>
+                            <button class="btn btn-primary" onclick="showCreateCampaignModal()">
+                                🎯 Criar Primeira Campanha
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <div class="campaigns-grid">
+                        ${campaigns.map(campaign => `
+                            <div class="campaign-card">
+                                <div class="campaign-header">
+                                    <h3 class="campaign-title">${campaign.name}</h3>
+                                    <span class="campaign-status ${campaign.status}">${campaign.status === 'active' ? 'Ativa' : 'Inativa'}</span>
+                                </div>
+                                
+                                ${campaign.description ? `<p class="campaign-description">${campaign.description}</p>` : ''}
+                                
+                                <div class="campaign-stats">
+                                    <div class="campaign-stat">
+                                        <span class="campaign-stat-number">${campaign.groups_count || 0}</span>
+                                        <div class="campaign-stat-label">Grupos</div>
+                                    </div>
+                                    <div class="campaign-stat">
+                                        <span class="campaign-stat-number">${campaign.scheduled_count || 0}</span>
+                                        <div class="campaign-stat-label">Programadas</div>
+                                    </div>
+                                    <div class="campaign-stat">
+                                        <span class="campaign-stat-number">${campaign.instances_count || 0}</span>
+                                        <div class="campaign-stat-label">Instâncias</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="campaign-actions">
+                                    <button class="btn btn-primary" onclick="manageCampaign('${campaign.id}', '${campaign.name}')">
+                                        ⚙️ Gerenciar
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteCampaign('${campaign.id}', '${campaign.name}')">
+                                        🗑️ Excluir
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('❌ Erro ao carregar campanhas:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">❌</div>
+                        <div class="empty-title">Erro ao carregar campanhas</div>
+                        <p>${error.message}</p>
+                        <button class="btn btn-primary" onclick="loadCampaigns()">🔄 Tentar Novamente</button>
+                    </div>
+                `;
+            }
+        }
     </script>
 </body>
 </html>'''
