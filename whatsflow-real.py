@@ -6698,6 +6698,220 @@ app.listen(PORT, '0.0.0.0', () => {
             self.is_running = False
             self.process = None
 
+# Message Scheduler for automated sending
+class MessageScheduler:
+    def __init__(self, api_base_url):
+        self.api_base_url = api_base_url
+        self.running = False
+        self.thread = None
+        
+    def start(self):
+        """Start the message scheduler"""
+        if not self.running:
+            self.running = True
+            self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
+            self.thread.start()
+            print("✅ Message Scheduler iniciado")
+    
+    def stop(self):
+        """Stop the message scheduler"""
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=5)
+        print("⏹️ Message Scheduler parado")
+    
+    def _run_scheduler(self):
+        """Main scheduler loop"""
+        while self.running:
+            try:
+                self._check_and_send_scheduled_messages()
+                time.sleep(30)  # Check every 30 seconds
+            except Exception as e:
+                print(f"❌ Erro no scheduler: {e}")
+                time.sleep(60)  # Wait longer on error
+    
+    def _check_and_send_scheduled_messages(self):
+        """Check for messages that need to be sent"""
+        try:
+            brazil_tz = pytz.timezone('America/Sao_Paulo')
+            now_brazil = datetime.now(brazil_tz)
+            
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            # Get messages that need to be sent (next_run <= now and active)
+            cursor.execute("""
+                SELECT sm.*, smg.group_id, smg.group_name, smg.instance_id
+                FROM scheduled_messages sm
+                LEFT JOIN scheduled_message_groups smg ON sm.id = smg.message_id
+                WHERE sm.is_active = 1 
+                AND sm.next_run IS NOT NULL 
+                AND datetime(sm.next_run) <= datetime(?)
+            """, (now_brazil.isoformat(),))
+            
+            messages_to_send = cursor.fetchall()
+            
+            for row in messages_to_send:
+                try:
+                    message_id = row[0]
+                    message_text = row[2]
+                    message_type = row[3]
+                    media_url = row[4]
+                    schedule_type = row[5]
+                    schedule_time = row[6]
+                    schedule_days = row[7]
+                    schedule_date = row[8]
+                    group_id = row[11] if len(row) > 11 else None
+                    group_name = row[12] if len(row) > 12 else 'Grupo'
+                    instance_id = row[13] if len(row) > 13 else None
+                    
+                    if not group_id or not instance_id:
+                        print(f"⚠️ Mensagem {message_id} sem grupo ou instância definidos")
+                        continue
+                    
+                    # Send message
+                    success = self._send_message_to_group(
+                        instance_id, group_id, message_text, message_type, media_url
+                    )
+                    
+                    if success:
+                        print(f"✅ Mensagem enviada para {group_name} via instância {instance_id}")
+                        
+                        # Log success
+                        self._log_message_sent(message_id, group_id, group_name, 
+                                             message_text, 'sent', instance_id)
+                        
+                        # Calculate next run if recurring
+                        if schedule_type == 'weekly':
+                            next_run = self._calculate_next_weekly_run(
+                                schedule_time, json.loads(schedule_days or '[]'), brazil_tz
+                            )
+                            
+                            cursor.execute("""
+                                UPDATE scheduled_messages 
+                                SET next_run = ?
+                                WHERE id = ?
+                            """, (next_run, message_id))
+                        else:
+                            # For 'once' type, deactivate after sending
+                            cursor.execute("""
+                                UPDATE scheduled_messages 
+                                SET is_active = 0, next_run = NULL
+                                WHERE id = ?
+                            """, (message_id,))
+                    else:
+                        print(f"❌ Falha ao enviar mensagem para {group_name}")
+                        
+                        # Log failure
+                        self._log_message_sent(message_id, group_id, group_name,
+                                             message_text, 'failed', instance_id,
+                                             'Erro na conexão com Baileys')
+                        
+                        # Retry in 5 minutes for failed messages
+                        retry_time = now_brazil + timedelta(minutes=5)
+                        cursor.execute("""
+                            UPDATE scheduled_messages 
+                            SET next_run = ?
+                            WHERE id = ?
+                        """, (retry_time.isoformat(), message_id))
+                    
+                except Exception as e:
+                    print(f"❌ Erro ao processar mensagem agendada {row[0] if row else 'unknown'}: {e}")
+                    continue
+            
+            conn.commit()
+            conn.close()
+            
+            if messages_to_send:
+                print(f"📤 Processadas {len(messages_to_send)} mensagens agendadas")
+                
+        except Exception as e:
+            print(f"❌ Erro ao verificar mensagens agendadas: {e}")
+    
+    def _send_message_to_group(self, instance_id, group_id, message_text, message_type, media_url):
+        """Send message to group via Baileys API"""
+        try:
+            payload = {
+                'to': group_id,
+                'message': message_text or '',
+                'type': message_type
+            }
+            
+            # Add media URL for non-text messages
+            if message_type != 'text' and media_url:
+                if message_type == 'image':
+                    payload['imageUrl'] = media_url
+                elif message_type == 'audio':
+                    payload['audioUrl'] = media_url  
+                elif message_type == 'video':
+                    payload['videoUrl'] = media_url
+            
+            response = requests.post(
+                f"{self.api_base_url}/send/{instance_id}",
+                json=payload,
+                timeout=30
+            )
+            
+            return response.status_code == 200
+            
+        except Exception as e:
+            print(f"❌ Erro ao enviar via Baileys: {e}")
+            return False
+    
+    def _calculate_next_weekly_run(self, schedule_time, schedule_days, brazil_tz):
+        """Calculate next weekly run"""
+        try:
+            now_brazil = datetime.now(brazil_tz)
+            hour, minute = map(int, schedule_time.split(':'))
+            
+            weekdays = {
+                'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+                'friday': 4, 'saturday': 5, 'sunday': 6
+            }
+            
+            target_weekdays = [weekdays[day] for day in schedule_days if day in weekdays]
+            
+            # Find next occurrence
+            for i in range(1, 8):  # Start from tomorrow
+                check_date = now_brazil + timedelta(days=i)
+                if check_date.weekday() in target_weekdays:
+                    next_run = check_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    return next_run.isoformat()
+            
+            # Fallback
+            next_run = now_brazil + timedelta(days=7)
+            next_run = next_run.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            return next_run.isoformat()
+            
+        except Exception as e:
+            print(f"❌ Erro ao calcular próxima execução semanal: {e}")
+            return None
+    
+    def _log_message_sent(self, message_id, group_id, group_name, message_text, 
+                         status, instance_id, error_message=None):
+        """Log sent message to history"""
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            history_id = str(uuid.uuid4())
+            sent_at = datetime.now().isoformat()
+            
+            cursor.execute("""
+                INSERT INTO message_history 
+                (id, campaign_id, group_id, group_name, message_text, sent_at, status, error_message, instance_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                history_id, message_id, group_id, group_name, message_text,
+                sent_at, status, error_message, instance_id
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            print(f"❌ Erro ao registrar histórico: {e}")
+
 # HTTP Handler with Baileys integration
 class WhatsFlowRealHandler(BaseHTTPRequestHandler):
     def do_GET(self):
