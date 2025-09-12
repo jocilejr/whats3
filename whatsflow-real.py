@@ -9371,6 +9371,9 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             schedule_type = data.get('schedule_type')
             schedule_time = data.get('schedule_time')
             
+            # Optional campaign field
+            campaign_id = data.get('campaign_id', None)
+            
             # Optional fields
             message_text = data.get('message_text', '')
             message_type = data.get('message_type', 'text')
@@ -9455,7 +9458,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                  is_active, next_run, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                message_id, f"{group_id}_{instance_id}", message_text, message_type, media_url,
+                message_id, campaign_id, message_text, message_type, media_url,
                 schedule_type, schedule_time, json.dumps(schedule_days), schedule_date,
                 1, next_run, created_at
             ))
