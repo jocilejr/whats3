@@ -8526,7 +8526,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 return
             
             # Calculate next run using Brazil timezone
-            from datetime import datetime
+            from datetime import datetime, timedelta
             import pytz
             
             brazil_tz = pytz.timezone('America/Sao_Paulo')
