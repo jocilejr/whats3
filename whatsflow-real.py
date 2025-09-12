@@ -2132,9 +2132,190 @@ HTML_APP = '''<!DOCTYPE html>
             box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
         }
         
+        /* Scheduled Messages Styles */
+        .scheduled-messages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        
+        .scheduled-message-card {
+            background: linear-gradient(135deg, #fefefe 0%, #f8f9ff 100%);
+            border: 1px solid #e0e7ff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(99, 102, 241, 0.08);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .scheduled-message-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.15);
+            border-color: #a5b4fc;
+        }
+        
+        .scheduled-message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+        
+        .scheduled-message-type {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .scheduled-message-type.text {
+            background: rgba(99, 102, 241, 0.1);
+            color: #6366f1;
+        }
+        
+        .scheduled-message-type.image {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+        }
+        
+        .scheduled-message-type.audio {
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+        
+        .scheduled-message-type.video {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+        
+        .schedule-info {
+            background: rgba(99, 102, 241, 0.05);
+            border: 1px solid rgba(99, 102, 241, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+            margin: 12px 0;
+        }
+        
+        .schedule-time {
+            font-weight: 600;
+            color: #4f46e5;
+            font-size: 1.1rem;
+        }
+        
+        .schedule-days {
+            margin-top: 6px;
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        
+        .schedule-day {
+            background: #6366f1;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+        
+        .message-preview {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 12px 0;
+        }
+        
+        .media-preview {
+            max-width: 100%;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
+        
+        .media-preview img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+        }
+        
+        .media-preview audio,
+        .media-preview video {
+            width: 100%;
+            max-height: 200px;
+        }
+        
+        .schedule-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        
+        .schedule-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .schedule-btn.edit {
+            background: #f59e0b;
+            color: white;
+        }
+        
+        .schedule-btn.edit:hover {
+            background: #d97706;
+        }
+        
+        .schedule-btn.delete {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .schedule-btn.delete:hover {
+            background: #dc2626;
+        }
+        
+        .schedule-btn.toggle {
+            background: #6b7280;
+            color: white;
+        }
+        
+        .schedule-btn.toggle:hover {
+            background: #4b5563;
+        }
+        
+        .schedule-btn.toggle.active {
+            background: #10b981;
+        }
+        
+        .schedule-btn.toggle.active:hover {
+            background: #059669;
+        }
+        
+        .next-run {
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-top: 8px;
+            font-style: italic;
+        }
+        
         /* Responsive adjustments */
         @media (max-width: 768px) {
             .campaigns-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .scheduled-messages-grid {
                 grid-template-columns: 1fr;
             }
             
