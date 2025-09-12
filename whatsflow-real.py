@@ -6199,8 +6199,8 @@ HTML_APP = '''<!DOCTYPE html>
             document.getElementById('manageCampaignTitle').textContent = `🎯 ${campaignName}`;
             document.getElementById('manageCampaignModal').style.display = 'flex';
             
-            // Load campaign instances for group selection
-            loadCampaignInstancesForGroups(campaignId);
+            // Load all instances for group selection
+            loadCampaignInstancesForGroups();
             
             // Load existing campaign groups
             loadExistingCampaignGroups(campaignId);
@@ -6241,15 +6241,15 @@ HTML_APP = '''<!DOCTYPE html>
         }
         
         // Load campaign instances for group selection
-        async function loadCampaignInstancesForGroups(campaignId) {
+        async function loadCampaignInstancesForGroups() {
             const select = document.getElementById('campaignGroupsInstance');
             try {
-                const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${campaignId}/instances`);
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/instances`);
                 const instances = await response.json();
-                
+
                 select.innerHTML = '<option value="">Selecione uma instância</option>' +
                     instances.map(instance => `
-                        <option value="${instance.id}">${instance.name} (${instance.status})</option>
+                        <option value="${instance.id}">${instance.name} ${instance.connected ? '(Conectado)' : '(Desconectado)'}</option>
                     `).join('');
             } catch (error) {
                 select.innerHTML = '<option value="">Erro ao carregar instâncias</option>';
