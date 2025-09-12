@@ -4,7 +4,7 @@
     "passed": 11,
     "failed": 0,
     "success_rate": 100.0,
-    "created_campaign_id": "72255ea3-3e12-4dd0-97cb-ee62992c7a4a",
+    "created_campaign_id": "4f393093-cf0e-422e-843e-6c4f9d332cc7",
     "available_instances_count": 3
   },
   "test_results": [
@@ -12,7 +12,7 @@
       "test": "Conectividade API Base",
       "success": true,
       "details": "API respondendo corretamente. Stats: {'contacts_count': 6, 'conversations_count': 6, 'messages_count': 0}",
-      "timestamp": "2025-09-12T17:31:51.734963",
+      "timestamp": "2025-09-12T17:32:28.534547",
       "response_data": {
         "contacts_count": 6,
         "conversations_count": 6,
@@ -23,7 +23,7 @@
       "test": "GET /api/instances - Listar instâncias disponíveis",
       "success": true,
       "details": "Encontradas 3 instâncias disponíveis para seleção",
-      "timestamp": "2025-09-12T17:31:52.238594",
+      "timestamp": "2025-09-12T17:32:29.037832",
       "response_data": {
         "count": 3,
         "instances": [
@@ -36,20 +36,20 @@
     {
       "test": "GET /api/campaigns - Listar campanhas (vazia inicialmente)",
       "success": true,
-      "details": "Lista de campanhas retornada: 1 campanhas existentes",
-      "timestamp": "2025-09-12T17:31:52.742547",
+      "details": "Lista de campanhas retornada: 2 campanhas existentes",
+      "timestamp": "2025-09-12T17:32:29.541232",
       "response_data": {
-        "count": 1
+        "count": 2
       }
     },
     {
       "test": "POST /api/campaigns - Criar nova campanha com instâncias",
       "success": true,
-      "details": "Campanha criada com sucesso. ID: 72255ea3-3e12-4dd0-97cb-ee62992c7a4a. Instâncias: 3",
-      "timestamp": "2025-09-12T17:31:53.252519",
+      "details": "Campanha criada com sucesso. ID: 4f393093-cf0e-422e-843e-6c4f9d332cc7. Instâncias: 3",
+      "timestamp": "2025-09-12T17:32:30.050527",
       "response_data": {
         "success": true,
-        "campaign_id": "72255ea3-3e12-4dd0-97cb-ee62992c7a4a",
+        "campaign_id": "4f393093-cf0e-422e-843e-6c4f9d332cc7",
         "message": "Campanha criada com sucesso"
       }
     },
@@ -57,7 +57,7 @@
       "test": "GET /api/campaigns/{id}/instances - Instâncias da campanha",
       "success": true,
       "details": "Instâncias da campanha retornadas: 3 instâncias",
-      "timestamp": "2025-09-12T17:31:53.755995",
+      "timestamp": "2025-09-12T17:32:30.553746",
       "response_data": {
         "count": 3,
         "instances": [
@@ -71,7 +71,7 @@
       "test": "GET /api/campaigns/{id}/groups - Grupos da campanha",
       "success": true,
       "details": "Grupos da campanha retornados: 0 grupos",
-      "timestamp": "2025-09-12T17:31:54.259574",
+      "timestamp": "2025-09-12T17:32:31.056985",
       "response_data": {
         "count": 0
       }
@@ -80,7 +80,7 @@
       "test": "POST /api/campaigns/{id}/groups - Adicionar grupos",
       "success": true,
       "details": "Grupos adicionados com sucesso: 2 grupos",
-      "timestamp": "2025-09-12T17:31:54.769565",
+      "timestamp": "2025-09-12T17:32:31.566214",
       "response_data": {
         "success": true,
         "message": "2 grupos adicionados com sucesso"
@@ -90,7 +90,7 @@
       "test": "GET /api/campaigns/{id}/scheduled-messages - Mensagens programadas",
       "success": true,
       "details": "Mensagens programadas retornadas: 0 mensagens",
-      "timestamp": "2025-09-12T17:31:55.273190",
+      "timestamp": "2025-09-12T17:32:32.069778",
       "response_data": {
         "count": 0
       }
@@ -98,12 +98,12 @@
     {
       "test": "POST /api/scheduled-messages - Criar mensagem com campaign_id",
       "success": true,
-      "details": "Mensagem programada criada com sucesso. Campaign ID mantido: 72255ea3-3e12-4dd0-97cb-ee62992c7a4a",
-      "timestamp": "2025-09-12T17:31:55.790787",
+      "details": "Mensagem programada criada com sucesso. Campaign ID mantido: 4f393093-cf0e-422e-843e-6c4f9d332cc7",
+      "timestamp": "2025-09-12T17:32:32.579779",
       "response_data": {
         "success": true,
-        "message_id": "39d44ad2-62a4-44bf-90c4-ef97996c8950",
-        "next_run": "2025-09-12T18:31:00-03:00",
+        "message_id": "4e2898da-2d4f-495b-930d-beddb42087fa",
+        "next_run": "2025-09-12T18:32:00-03:00",
         "message": "Mensagem agendada com sucesso!"
       }
     },
@@ -111,15 +111,15 @@
       "test": "Integração Campanhas-Sistema Existente",
       "success": true,
       "details": "Campanha integrada com sucesso. Nome: Campanha Teste, Instâncias: 1",
-      "timestamp": "2025-09-12T17:31:56.294190",
+      "timestamp": "2025-09-12T17:32:33.083088",
       "response_data": {
-        "id": "72255ea3-3e12-4dd0-97cb-ee62992c7a4a",
+        "id": "4f393093-cf0e-422e-843e-6c4f9d332cc7",
         "name": "Campanha Teste",
         "description": "Teste do sistema de campanhas",
         "status": "active",
         "created_at": null,
-        "updated_at": "2025-09-12T17:31:53.244936+00:00",
-        "groups_count": "2025-09-12T17:31:53.244951+00:00",
+        "updated_at": "2025-09-12T17:32:30.043332+00:00",
+        "groups_count": "2025-09-12T17:32:30.043344+00:00",
         "scheduled_count": 2,
         "instances_count": 1
       }
@@ -128,7 +128,7 @@
       "test": "Estrutura do Banco de Dados",
       "success": true,
       "details": "Estrutura do banco validada. Campos obrigatórios presentes: ['id', 'name', 'description', 'status', 'created_at']",
-      "timestamp": "2025-09-12T17:31:56.797321",
+      "timestamp": "2025-09-12T17:32:33.586213",
       "response_data": {
         "campaign_fields": [
           "id",
