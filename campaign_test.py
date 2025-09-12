@@ -402,16 +402,19 @@ class CampaignTester:
             return False
             
         try:
-            # Create a scheduled message with campaign context
+            # Create a scheduled message with campaign context using correct field names
             future_time = datetime.now() + timedelta(hours=1)
             
             message_data = {
                 "campaign_id": self.created_campaign_id,
                 "message_text": "Mensagem de teste da campanha",
                 "message_type": "text",
-                "scheduled_time": future_time.isoformat(),
-                "instance_id": self.available_instances[0].get('id') if self.available_instances else "test_instance",
-                "groups": ["test_group_1", "test_group_2"]
+                "group_id": "test_group_1",
+                "group_name": "Grupo Teste 1",
+                "instance_id": self.available_instances[0].get('id') if self.available_instances else "default",
+                "schedule_type": "once",
+                "schedule_time": future_time.strftime("%H:%M"),
+                "schedule_date": future_time.strftime("%Y-%m-%d")
             }
             
             response = requests.post(
