@@ -6,7 +6,9 @@ const makeWASocket = require('@whiskeysockets/baileys').default;
 const qrTerminal = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+ codex/migrate-server-routes-to-node.js
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 
 const app = express();
 
@@ -205,6 +207,7 @@ async function connectInstance(instanceId) {
                     }
                 }
 
+ codex/migrate-server-routes-to-node.js
                 // Update database about disconnection
                 try {
                     if (db) {
@@ -223,6 +226,7 @@ async function connectInstance(instanceId) {
                     }
                 } catch (err) {
                     console.log('⚠️ Falha ao atualizar desconexão no banco:', err.message);
+
                 }
 
             } else if (connection === 'open') {
@@ -263,12 +267,15 @@ async function connectInstance(instanceId) {
                         console.log(`📊 ${chats.length} conversas encontradas`);
 
                         // Process chats in batches to avoid overwhelming the system
+ codex/migrate-server-routes-to-node.js
                         // Placeholder for future chat import handling if needed
+
                     } catch (err) {
                         console.log('⚠️ Erro ao importar conversas:', err.message);
                     }
                 }, 5000); // Wait 5 seconds after connection
 
+ codex/migrate-server-routes-to-node.js
                 // Update instance status in database
                 try {
                     if (db) {
@@ -283,6 +290,7 @@ async function connectInstance(instanceId) {
                             },
                             { upsert: true }
                         );
+
                     }
                 } catch (err) {
                     console.log('⚠️ Erro ao atualizar status da instância:', err.message);
@@ -317,6 +325,7 @@ async function connectInstance(instanceId) {
                     console.log(`👤 Contato: ${contactName || from.split('@')[0]} (${from.split('@')[0]})`);
                     console.log(`💬 Mensagem: ${messageText.substring(0, 50)}...`);
 
+ codex/migrate-server-routes-to-node.js
                     // Save contact and message directly to database
                     try {
                         const contact = await getOrCreateContact(
@@ -336,6 +345,7 @@ async function connectInstance(instanceId) {
                         });
                     } catch (err) {
                         console.log('❌ Erro ao salvar mensagem no banco:', err.message);
+
                     }
                 }
             }
