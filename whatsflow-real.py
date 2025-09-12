@@ -5731,8 +5731,24 @@ HTML_APP = '''<!DOCTYPE html>
         // Create scheduled message
         async function createScheduledMessage() {
             try {
+                // Check if we're in campaign context or regular context
+                const campaignId = window.currentScheduleCampaign || null;
+                let groupsToUse = [];
+                
+                if (campaignId) {
+                    // Use campaign groups
+                    groupsToUse = selectedCampaignGroups.map(group => ({
+                        group_id: group.id,
+                        group_name: group.name,
+                        instance_id: group.instance_id
+                    }));
+                } else {
+                    // Use selected groups from regular flow
+                    groupsToUse = selectedScheduleGroups;
+                }
+                
                 // Validate form
-                if (selectedScheduleGroups.length === 0) {
+                if (groupsToUse.length === 0) {
                     alert('❌ Selecione pelo menos um grupo');
                     return;
                 }
@@ -5783,13 +5799,14 @@ HTML_APP = '''<!DOCTYPE html>
                 }
                 
                 // Create scheduled message for each group
-                const promises = selectedScheduleGroups.map(group => {
+                const promises = groupsToUse.map(group => {
                     return fetch('/api/scheduled-messages', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
+                            campaign_id: campaignId,
                             group_id: group.group_id,
                             group_name: group.group_name,
                             instance_id: group.instance_id,
@@ -5806,8 +5823,16 @@ HTML_APP = '''<!DOCTYPE html>
                 
                 await Promise.all(promises);
                 
-                alert(`✅ Mensagem agendada para ${selectedScheduleGroups.length} grupo(s)!`);
+                alert(`✅ Mensagem agendada para ${groupsToUse.length} grupo(s)!`);
                 hideScheduleMessageModal();
+                
+                // Reset campaign context
+                window.currentScheduleCampaign = null;
+                
+                // Reload appropriate data
+                if (campaignId) {
+                    loadCampaignScheduledMessages();
+                }
                 
             } catch (error) {
                 console.error('❌ Erro ao agendar mensagem:', error);
