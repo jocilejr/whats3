@@ -2462,7 +2462,12 @@ HTML_APP = '''<!DOCTYPE html>
             margin-top: 8px;
             font-style: italic;
         }
-        
+
+        /* Ensure schedule modal appears above campaign management */
+        #scheduleMessageModal {
+            z-index: 1100;
+        }
+
         /* Responsive adjustments */
         @media (max-width: 768px) {
             .campaigns-grid {
