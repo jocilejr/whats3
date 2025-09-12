@@ -6833,6 +6833,9 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         elif self.path.startswith('/api/flows/'):
             flow_id = self.path.split('/')[-1]
             self.handle_delete_flow(flow_id)
+        elif self.path.startswith('/api/scheduled-messages/'):
+            message_id = self.path.split('/')[-1]
+            self.handle_delete_scheduled_message(message_id)
         else:
             self.send_error(404, "Not Found")
     
