@@ -7037,7 +7037,7 @@ async function connectInstance(instanceId) {
                             
                             // Send batch to Python backend
                             const fetch = (await import('node-fetch')).default;
-                            await fetch('http://localhost:8889/api/chats/import', {
+                            await fetch(`http://localhost:8889/api/chats/import`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
