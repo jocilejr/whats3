@@ -6414,7 +6414,7 @@ HTML_APP = '''<!DOCTYPE html>
             container.innerHTML = '<div class="loading">🔄 Carregando programações...</div>';
             
             try {
-                const response = await fetch(`/api/campaigns/${currentCampaignId}/scheduled-messages`);
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${currentCampaignId}/scheduled-messages`);
                 const messages = await response.json();
                 
                 renderCampaignScheduledMessages(messages);
