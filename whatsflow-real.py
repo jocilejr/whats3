@@ -8879,21 +8879,42 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             data = json.loads(post_data.decode('utf-8'))
             
             campaign_id = str(uuid.uuid4())
+            instances = data.get('instances', [])
             
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
             
+            # Create campaign
             cursor.execute("""
-                INSERT INTO campaigns (id, name, description, status, instance_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO campaigns (id, name, description, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (campaign_id, data['name'], data.get('description', ''), 
-                  data.get('status', 'active'), data.get('instance_id'),
+                  data.get('status', 'active'),
                   datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat()))
+            
+            # Create campaign_instances table if not exists
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS campaign_instances (
+                    campaign_id TEXT,
+                    instance_id TEXT,
+                    created_at TEXT,
+                    PRIMARY KEY (campaign_id, instance_id),
+                    FOREIGN KEY (campaign_id) REFERENCES campaigns (id) ON DELETE CASCADE
+                )
+            """)
+            
+            # Add instances to campaign
+            created_at = datetime.now(timezone.utc).isoformat()
+            for instance_id in instances:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO campaign_instances (campaign_id, instance_id, created_at)
+                    VALUES (?, ?, ?)
+                """, (campaign_id, instance_id, created_at))
             
             conn.commit()
             conn.close()
             
-            print(f"✅ Campanha criada: {data['name']}")
+            print(f"✅ Campanha criada: {data['name']} com {len(instances)} instâncias")
             self.send_json_response({
                 'success': True, 
                 'campaign_id': campaign_id,
