@@ -6555,7 +6555,7 @@ HTML_APP = '''<!DOCTYPE html>
 # Inject API base URL from environment into the frontend
 HTML_APP = HTML_APP.replace(
     "<body>",
-    f"<body><script>window.API_BASE_URL = {json.dumps(API_BASE_URL)};</script>",
+    f"<body><script>window.API_BASE_URL = {json.dumps(API_BASE_URL)}; window.WHATSFLOW_API_URL = 'http://localhost:{PORT}';</script>",
     1,
 )
 
