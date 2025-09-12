@@ -6170,6 +6170,359 @@ HTML_APP = '''<!DOCTYPE html>
                 `;
             }
         }
+        
+        // Manage campaign
+        function manageCampaign(campaignId, campaignName) {
+            currentCampaignId = campaignId;
+            document.getElementById('manageCampaignTitle').textContent = `🎯 ${campaignName}`;
+            document.getElementById('manageCampaignModal').style.display = 'flex';
+            
+            // Load campaign instances for group selection
+            loadCampaignInstancesForGroups(campaignId);
+            
+            // Load existing campaign groups
+            loadExistingCampaignGroups(campaignId);
+            
+            // Show groups tab by default
+            showCampaignTab('groups');
+        }
+        
+        // Hide campaign management modal
+        function hideCampaignModal() {
+            document.getElementById('manageCampaignModal').style.display = 'none';
+            currentCampaignId = null;
+            selectedCampaignGroups = [];
+        }
+        
+        // Show campaign tab
+        function showCampaignTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.campaign-tab').forEach(tab => {
+                tab.classList.remove('active');
+                tab.style.display = 'none';
+            });
+            
+            // Remove active class from all nav buttons
+            document.querySelectorAll('.campaign-nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(`campaign${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}Tab`).classList.add('active');
+            document.getElementById(`campaign${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}Tab`).style.display = 'block';
+            document.getElementById(`${tabName}Tab`).classList.add('active');
+            
+            // Load specific content
+            if (tabName === 'view') {
+                loadCampaignScheduledMessages();
+            }
+        }
+        
+        // Load campaign instances for group selection
+        async function loadCampaignInstancesForGroups(campaignId) {
+            const select = document.getElementById('campaignGroupsInstance');
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}/instances`);
+                const instances = await response.json();
+                
+                select.innerHTML = '<option value="">Selecione uma instância</option>' +
+                    instances.map(instance => `
+                        <option value="${instance.id}">${instance.name} (${instance.status})</option>
+                    `).join('');
+            } catch (error) {
+                select.innerHTML = '<option value="">Erro ao carregar instâncias</option>';
+            }
+        }
+        
+        // Load campaign groups from selected instance
+        async function loadCampaignGroups() {
+            const instanceId = document.getElementById('campaignGroupsInstance').value;
+            const container = document.getElementById('availableCampaignGroups');
+            
+            if (!instanceId) {
+                container.innerHTML = '<div class="empty-state"><p>Selecione uma instância para carregar grupos</p></div>';
+                return;
+            }
+            
+            container.innerHTML = '<div class="loading">🔄 Carregando grupos...</div>';
+            
+            try {
+                const response = await fetch(`http://localhost:3002/groups/${instanceId}`);
+                const groups = await response.json();
+                
+                if (!groups || groups.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><p>Nenhum grupo encontrado nesta instância</p></div>';
+                    return;
+                }
+                
+                container.innerHTML = groups.map(group => `
+                    <div class="group-item" onclick="toggleGroupSelection('${group.id}', '${group.name}', '${instanceId}')">
+                        <input type="checkbox" id="group-${group.id}" onchange="event.stopPropagation()">
+                        <div class="group-info">
+                            <div class="group-name">${group.name}</div>
+                            <div class="group-participants">${group.participants?.length || 0} participantes</div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                container.innerHTML = '<div class="empty-state"><p>Erro ao carregar grupos</p></div>';
+            }
+        }
+        
+        // Toggle group selection
+        function toggleGroupSelection(groupId, groupName, instanceId) {
+            const checkbox = document.getElementById(`group-${groupId}`);
+            const groupItem = checkbox.closest('.group-item');
+            
+            checkbox.checked = !checkbox.checked;
+            
+            if (checkbox.checked) {
+                groupItem.classList.add('selected');
+                selectedCampaignGroups.push({
+                    id: groupId,
+                    name: groupName,
+                    instance_id: instanceId
+                });
+            } else {
+                groupItem.classList.remove('selected');
+                selectedCampaignGroups = selectedCampaignGroups.filter(g => g.id !== groupId);
+            }
+            
+            // Update selected groups display
+            updateSelectedCampaignGroups();
+            
+            // Save to campaign
+            saveCampaignGroups();
+        }
+        
+        // Update selected campaign groups display
+        function updateSelectedCampaignGroups() {
+            const container = document.getElementById('selectedCampaignGroups');
+            
+            if (selectedCampaignGroups.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>Nenhum grupo selecionado ainda</p></div>';
+                return;
+            }
+            
+            container.innerHTML = selectedCampaignGroups.map(group => `
+                <div class="group-item selected">
+                    <div class="group-info">
+                        <div class="group-name">${group.name}</div>
+                        <div class="group-participants">Instância: ${group.instance_id}</div>
+                    </div>
+                    <button onclick="removeGroupFromCampaign('${group.id}')" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 5px;">
+                        ✕
+                    </button>
+                </div>
+            `).join('');
+        }
+        
+        // Remove group from campaign
+        function removeGroupFromCampaign(groupId) {
+            selectedCampaignGroups = selectedCampaignGroups.filter(g => g.id !== groupId);
+            updateSelectedCampaignGroups();
+            
+            // Uncheck in available groups if visible
+            const checkbox = document.getElementById(`group-${groupId}`);
+            if (checkbox) {
+                checkbox.checked = false;
+                checkbox.closest('.group-item').classList.remove('selected');
+            }
+            
+            saveCampaignGroups();
+        }
+        
+        // Save campaign groups
+        async function saveCampaignGroups() {
+            if (!currentCampaignId) return;
+            
+            try {
+                await fetch(`/api/campaigns/${currentCampaignId}/groups`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        groups: selectedCampaignGroups
+                    })
+                });
+            } catch (error) {
+                console.error('❌ Erro ao salvar grupos da campanha:', error);
+            }
+        }
+        
+        // Load existing campaign groups
+        async function loadExistingCampaignGroups(campaignId) {
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}/groups`);
+                const groups = await response.json();
+                selectedCampaignGroups = groups;
+                updateSelectedCampaignGroups();
+            } catch (error) {
+                console.error('❌ Erro ao carregar grupos da campanha:', error);
+            }
+        }
+        
+        // Show schedule message modal for specific campaign
+        function showScheduleMessageForCampaign() {
+            if (!currentCampaignId) {
+                alert('❌ Nenhuma campanha selecionada');
+                return;
+            }
+            
+            if (selectedCampaignGroups.length === 0) {
+                alert('❌ Adicione grupos à campanha antes de programar mensagens');
+                return;
+            }
+            
+            // Set the campaign context
+            window.currentScheduleCampaign = currentCampaignId;
+            showScheduleMessageModal();
+        }
+        
+        // Load scheduled messages for campaign
+        async function loadCampaignScheduledMessages() {
+            if (!currentCampaignId) return;
+            
+            const container = document.getElementById('campaignScheduledMessages');
+            container.innerHTML = '<div class="loading">🔄 Carregando programações...</div>';
+            
+            try {
+                const response = await fetch(`/api/campaigns/${currentCampaignId}/scheduled-messages`);
+                const messages = await response.json();
+                
+                renderCampaignScheduledMessages(messages);
+            } catch (error) {
+                console.error('❌ Erro ao carregar mensagens da campanha:', error);
+                container.innerHTML = '<div class="empty-state"><p>Erro ao carregar programações</p></div>';
+            }
+        }
+        
+        // Render campaign scheduled messages
+        function renderCampaignScheduledMessages(messages) {
+            const container = document.getElementById('campaignScheduledMessages');
+            
+            if (messages.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📋</div>
+                        <div class="empty-title">Nenhuma mensagem programada</div>
+                        <p>Use a aba "Programar" para criar suas primeiras mensagens</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Group messages by day of week
+            const messagesByDay = {};
+            const daysOfWeek = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+            
+            messages.forEach(message => {
+                const date = new Date(message.next_run);
+                const dayOfWeek = date.getDay();
+                const dayName = daysOfWeek[dayOfWeek];
+                
+                if (!messagesByDay[dayName]) {
+                    messagesByDay[dayName] = [];
+                }
+                messagesByDay[dayName].push(message);
+            });
+            
+            container.innerHTML = Object.keys(messagesByDay).map(day => `
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: var(--primary-color);">${day}</h4>
+                    <div style="display: grid; gap: 10px;">
+                        ${messagesByDay[day].map(message => `
+                            <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; background: white;">
+                                <div style="display: flex; justify-content: between; align-items: flex-start; margin-bottom: 10px;">
+                                    <div style="flex: 1;">
+                                        <strong>${new Date(message.next_run).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</strong>
+                                        <span style="color: #666; margin-left: 10px;">${message.schedule_type === 'weekly' ? 'Semanal' : 'Único'}</span>
+                                    </div>
+                                    <span style="padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; ${message.is_active ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}">
+                                        ${message.is_active ? 'Ativa' : 'Inativa'}
+                                    </span>
+                                </div>
+                                
+                                <div style="margin-bottom: 10px;">
+                                    ${message.message_type === 'text' ? 
+                                        `<p style="margin: 0;">${message.message_text}</p>` :
+                                        `<div>
+                                            <p style="margin: 0 0 5px 0;"><strong>Tipo:</strong> ${message.message_type}</p>
+                                            ${message.media_url ? `<div style="margin: 5px 0;">${renderMediaPreview(message.media_url, message.message_type)}</div>` : ''}
+                                            ${message.message_text ? `<p style="margin: 5px 0 0 0;">${message.message_text}</p>` : ''}
+                                        </div>`
+                                    }
+                                </div>
+                                
+                                <div style="font-size: 0.9rem; color: #666;">
+                                    <strong>Grupos:</strong> ${message.groups_count} grupo(s)
+                                </div>
+                                
+                                <div style="display: flex; gap: 5px; margin-top: 10px;">
+                                    <button onclick="toggleScheduledMessage('${message.id}', ${!message.is_active})" 
+                                            class="btn btn-sm ${message.is_active ? 'btn-secondary' : 'btn-success'}" 
+                                            style="padding: 4px 8px; font-size: 0.8rem;">
+                                        ${message.is_active ? '⏸️ Pausar' : '▶️ Ativar'}
+                                    </button>
+                                    <button onclick="deleteScheduledMessage('${message.id}')" 
+                                            class="btn btn-sm btn-danger" style="padding: 4px 8px; font-size: 0.8rem;">
+                                        🗑️ Excluir
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Render media preview for scheduled messages
+        function renderMediaPreview(url, type) {
+            if (type === 'image') {
+                return `<img src="${url}" alt="Preview" style="max-width: 100px; max-height: 100px; border-radius: 4px;" onerror="this.style.display='none'">`;
+            } else if (type === 'video') {
+                return `<video style="max-width: 100px; max-height: 100px; border-radius: 4px;" controls><source src="${url}"></video>`;
+            } else if (type === 'audio') {
+                return `<audio controls style="width: 200px;"><source src="${url}"></audio>`;
+            }
+            return `<a href="${url}" target="_blank" style="color: var(--primary-color);">📎 Ver arquivo</a>`;
+        }
+        
+        // Delete campaign
+        async function deleteCampaign(campaignId, campaignName) {
+            if (!confirm(`❌ Tem certeza que deseja excluir a campanha "${campaignName}"?\n\nIsso também excluirá todas as mensagens programadas desta campanha.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    loadCampaigns();
+                    alert('✅ Campanha excluída com sucesso!');
+                } else {
+                    alert('❌ Erro ao excluir campanha');
+                }
+            } catch (error) {
+                console.error('❌ Erro ao excluir campanha:', error);
+                alert('❌ Erro ao excluir campanha');
+            }
+        }
+        
+        // Initialize campaigns when groups section is shown
+        document.addEventListener('DOMContentLoaded', function() {
+            // Override the original showSection to load campaigns when groups is selected
+            const originalShowSection = window.showSection;
+            window.showSection = function(name) {
+                originalShowSection(name);
+                if (name === 'groups') {
+                    setTimeout(loadCampaigns, 100);
+                }
+            };
+        });
     </script>
 </body>
 </html>'''
