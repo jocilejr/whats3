@@ -6270,13 +6270,18 @@ HTML_APP = '''<!DOCTYPE html>
             
             try {
                 const response = await fetch(`${window.API_BASE_URL}/groups/${instanceId}`);
-                const groups = await response.json();
-                
-                if (!groups || groups.length === 0) {
+                const result = await response.json();
+
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Erro ao carregar grupos');
+                }
+
+                const groups = result.groups || [];
+                if (groups.length === 0) {
                     container.innerHTML = '<div class="empty-state"><p>Nenhum grupo encontrado nesta instância</p></div>';
                     return;
                 }
-                
+
                 container.innerHTML = groups.map(group => `
                     <div class="group-item" onclick="toggleGroupSelection('${group.id}', '${group.name}', '${instanceId}')">
                         <input type="checkbox" id="group-${group.id}" onchange="event.stopPropagation()">
@@ -6287,7 +6292,8 @@ HTML_APP = '''<!DOCTYPE html>
                     </div>
                 `).join('');
             } catch (error) {
-                container.innerHTML = '<div class="empty-state"><p>Erro ao carregar grupos</p></div>';
+                console.error('❌ Erro ao carregar grupos:', error);
+                container.innerHTML = `<div class="empty-state"><p>Erro ao carregar grupos</p><p>${error.message}</p></div>`;
             }
         }
         
