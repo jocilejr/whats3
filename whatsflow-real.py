@@ -7115,7 +7115,7 @@ async function connectInstance(instanceId) {
                     while (retries > 0) {
                         try {
                             const fetch = (await import('node-fetch')).default;
-                            const response = await fetch(`http://localhost:8889/api/messages/receive`, {
+                            const response = await fetch(`${process.env.WHATSFLOW_API_URL || 'http://localhost:8889'}/api/messages/receive`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
