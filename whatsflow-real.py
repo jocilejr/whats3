@@ -6380,7 +6380,7 @@ HTML_APP = '''<!DOCTYPE html>
         // Load existing campaign groups
         async function loadExistingCampaignGroups(campaignId) {
             try {
-                const response = await fetch(`/api/campaigns/${campaignId}/groups`);
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${campaignId}/groups`);
                 const groups = await response.json();
                 selectedCampaignGroups = groups;
                 updateSelectedCampaignGroups();
