@@ -7440,12 +7440,17 @@ app.listen(PORT, '0.0.0.0', () => {
             # Start the service
             print("🚀 Iniciando serviço Baileys...")
             try:
+                # Set environment variables for Node.js process
+                env = os.environ.copy()
+                env['WHATSFLOW_API_URL'] = f'http://localhost:{PORT}'
+                
                 self.process = subprocess.Popen(
                     ['node', 'server.js'],
                     cwd=self.baileys_dir,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True
+                    text=True,
+                    env=env
                 )
                 
                 self.is_running = True
