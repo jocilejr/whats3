@@ -6248,7 +6248,7 @@ HTML_APP = '''<!DOCTYPE html>
         async function loadCampaignInstancesForGroups(campaignId) {
             const select = document.getElementById('campaignGroupsInstance');
             try {
-                const response = await fetch(`/api/campaigns/${campaignId}/instances`);
+                const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${campaignId}/instances`);
                 const instances = await response.json();
                 
                 select.innerHTML = '<option value="">Selecione uma instância</option>' +
