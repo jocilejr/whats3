@@ -40,10 +40,8 @@ DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
 
- codex/corrigir-erro-de-conexao-com-baileys-wjafpj
 # Candidate URLs for the Baileys service. We try to auto-discover the machine's
 # public IP so the script works even when the server address changes.
-
 
 def guess_public_baileys_url() -> Optional[str]:
     """Return Baileys URL using the machine's public IP if available."""
