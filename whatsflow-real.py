@@ -7540,7 +7540,7 @@ class MessageScheduler:
             brazil_tz = pytz.timezone('America/Sao_Paulo')
             now_brazil = datetime.now(brazil_tz)
             
-            conn = sqlite3.connect(DB_FILE)
+            conn = sqlite3.connect(DB_FILE, timeout=30)
             cursor = conn.cursor()
             
             # Get messages that need to be sent (next_run <= now and active)
@@ -7581,9 +7581,16 @@ class MessageScheduler:
                     if success:
                         print(f"✅ Mensagem enviada para {group_name} via instância {instance_id}")
                         
-                        # Log success
-                        self._log_message_sent(message_id, group_id, group_name, 
-                                             message_text, 'sent', instance_id)
+                        # Log success using shared cursor/connection
+                        self._log_message_sent(
+                            message_id,
+                            group_id,
+                            group_name,
+                            message_text,
+                            'sent',
+                            instance_id,
+                            cursor=cursor,
+                        )
                         
                         # Calculate next run if recurring
                         if schedule_type == 'weekly':
@@ -7606,10 +7613,17 @@ class MessageScheduler:
                     else:
                         print(f"❌ Falha ao enviar mensagem para {group_name}")
                         
-                        # Log failure
-                        self._log_message_sent(message_id, group_id, group_name,
-                                             message_text, 'failed', instance_id,
-                                             'Erro na conexão com Baileys')
+                        # Log failure using shared cursor/connection
+                        self._log_message_sent(
+                            message_id,
+                            group_id,
+                            group_name,
+                            message_text,
+                            'failed',
+                            instance_id,
+                            'Erro na conexão com Baileys',
+                            cursor=cursor,
+                        )
                         
                         # Retry in 5 minutes for failed messages
                         retry_time = now_brazil + timedelta(minutes=5)
@@ -7691,28 +7705,60 @@ class MessageScheduler:
             print(f"❌ Erro ao calcular próxima execução semanal: {e}")
             return None
     
-    def _log_message_sent(self, message_id, group_id, group_name, message_text, 
-                         status, instance_id, error_message=None):
-        """Log sent message to history"""
+    def _log_message_sent(self, message_id, group_id, group_name, message_text,
+                         status, instance_id, error_message=None, cursor=None):
+        """Log sent message to history.
+
+        Uses the provided cursor/connection when available. If no cursor is
+        supplied, a separate connection is created with a timeout to ensure
+        resources are released even on errors.
+        """
         try:
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
-            
             history_id = str(uuid.uuid4())
             sent_at = datetime.now().isoformat()
-            
-            cursor.execute("""
-                INSERT INTO message_history 
-                (id, campaign_id, group_id, group_name, message_text, sent_at, status, error_message, instance_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                history_id, message_id, group_id, group_name, message_text,
-                sent_at, status, error_message, instance_id
-            ))
-            
-            conn.commit()
-            conn.close()
-            
+
+            if cursor is not None:
+                cursor.execute(
+                    """
+                    INSERT INTO message_history
+                    (id, campaign_id, group_id, group_name, message_text, sent_at, status, error_message, instance_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        history_id,
+                        message_id,
+                        group_id,
+                        group_name,
+                        message_text,
+                        sent_at,
+                        status,
+                        error_message,
+                        instance_id,
+                    ),
+                )
+            else:
+                with sqlite3.connect(DB_FILE, timeout=30) as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        INSERT INTO message_history
+                        (id, campaign_id, group_id, group_name, message_text, sent_at, status, error_message, instance_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            history_id,
+                            message_id,
+                            group_id,
+                            group_name,
+                            message_text,
+                            sent_at,
+                            status,
+                            error_message,
+                            instance_id,
+                        ),
+                    )
+                    conn.commit()
+
         except Exception as e:
             print(f"❌ Erro ao registrar histórico: {e}")
 
