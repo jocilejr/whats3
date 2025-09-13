@@ -7775,9 +7775,7 @@ class MessageScheduler:
                         json=payload,
                         timeout=(10, 180),
                     )
-update-timeout-handling-in-_send_message_to_group
-
-
+                    
                     if response.status_code != 200:
                         logger.error(
                             f"Baileys send failed ({response.status_code}): {response.text}"
