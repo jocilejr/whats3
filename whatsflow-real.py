@@ -38,7 +38,7 @@ except ImportError:
 # Configurações
 DB_FILE = "whatsflow.db"
 PORT = 8889
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://78.46.150.111:3002")
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://78.46.250.112:3002")
 WEBSOCKET_PORT = 8890
 
 # WebSocket clients management
@@ -7576,40 +7576,6 @@ class MessageScheduler:
             """, (now_brazil.isoformat(),))
             
             messages_to_send = cursor.fetchall()
-
-            # Verify Baileys service availability before sending
-            if messages_to_send and not check_service_health(self.api_base_url):
-                print("⚠️ Serviço Baileys indisponível - adiando envios")
-                retry_time = now_brazil + timedelta(minutes=5)
-                for row in messages_to_send:
-                    message_id = row[0]
-                    group_id = row[12]
-                    group_name = row[13]
-                    instance_id = row[14]
-
-                    # Log failure with shared cursor/connection
-                    self._log_message_sent(
-                        message_id,
-                        group_id,
-                        group_name,
-                        row[2],
-                        'failed',
-                        instance_id,
-                        'Baileys service unreachable',
-                        cursor=cursor,
-                    )
-
-                    cursor.execute(
-                        """
-                            UPDATE scheduled_messages
-                            SET next_run = ?
-                            WHERE id = ?
-                        """,
-                        (retry_time.isoformat(), message_id),
-                    )
-
-                conn.commit()
-                return
 
             for row in messages_to_send:
                 try:
