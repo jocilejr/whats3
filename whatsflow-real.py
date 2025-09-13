@@ -6815,6 +6815,26 @@ def init_db():
     conn.close()
     print("✅ Banco de dados inicializado com suporte para Campanhas e WebSocket")
 
+def get_db_connection(timeout=60, max_retries=3):
+    """Get a standardized database connection with WAL mode and retry logic"""
+    for attempt in range(max_retries):
+        try:
+            conn = sqlite3.connect(DB_FILE, timeout=timeout)
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA synchronous=NORMAL')
+            conn.execute('PRAGMA cache_size=10000')
+            conn.execute('PRAGMA temp_store=memory')
+            return conn
+        except sqlite3.OperationalError as e:
+            if "database is locked" in str(e) and attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 2  # Exponential backoff: 2s, 4s, 6s
+                print(f"⚠️ Database bloqueado, tentativa {attempt + 1}/{max_retries}. Aguardando {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+            else:
+                raise e
+    raise sqlite3.OperationalError("Não foi possível conectar ao banco de dados após múltiplas tentativas")
+
 # WebSocket Server Functions
 if WEBSOCKETS_AVAILABLE:
     async def websocket_handler(websocket, path):
