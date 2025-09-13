@@ -5213,13 +5213,18 @@ HTML_APP = '''<!DOCTYPE html>
             document.getElementById('scheduleCampaignId').value = campaignId;
             document.getElementById('scheduleModal').style.display = 'flex';
             
-            // Set default time to current time + 1 hour
-            const now = new Date();
-            now.setHours(now.getHours() + 1);
-            document.getElementById('scheduleTime').value = now.toTimeString().slice(0, 5);
-            
-            // Set default date to today
-            document.getElementById('scheduleDate').value = now.toISOString().slice(0, 10);
+            // Pre-fill current date/time only if fields are empty to avoid overwriting user selection
+            const timeInput = document.getElementById('scheduleTime');
+            const dateInput = document.getElementById('scheduleDate');
+            if (!timeInput.value || !dateInput.value) {
+                const now = new Date();
+                if (!timeInput.value) {
+                    timeInput.value = now.toTimeString().slice(0, 5);
+                }
+                if (!dateInput.value) {
+                    dateInput.value = now.toISOString().slice(0, 10);
+                }
+            }
             
             handleScheduleTypeChange();
         }
@@ -9054,30 +9059,53 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
-            
+
             groups = data.get('groups', [])
             if not groups:
                 self.send_json_response({"error": "Nenhum grupo fornecido"}, 400)
                 return
-            
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
-            
-            # Remove existing groups for this campaign (replace)
-            cursor.execute("DELETE FROM campaign_groups WHERE campaign_id = ?", (campaign_id,))
-            
-            # Add new groups
+
+            # Validate that each group has required fields
             for group in groups:
-                group_id = str(uuid.uuid4())
-                instance_id = group.get('instance_id', 'default')  # Use default if not provided
-                cursor.execute("""
-                    INSERT INTO campaign_groups (id, campaign_id, group_id, group_name, instance_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (group_id, campaign_id, group['group_id'], group['group_name'], 
-                      instance_id, datetime.now(timezone.utc).isoformat()))
-            
-            conn.commit()
-            conn.close()
+                if 'group_id' not in group or 'group_name' not in group:
+                    self.send_json_response(
+                        {"error": "Cada grupo deve conter group_id e group_name"},
+                        400,
+                    )
+                    return
+
+            # Ensure database connection is properly closed
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+
+                # Remove existing groups for this campaign (replace)
+                cursor.execute(
+                    "DELETE FROM campaign_groups WHERE campaign_id = ?",
+                    (campaign_id,),
+                )
+
+                # Add new groups
+                for group in groups:
+                    group_id = str(uuid.uuid4())
+                    instance_id = group.get(
+                        'instance_id', 'default'
+                    )  # Use default if not provided
+                    cursor.execute(
+                        """
+                        INSERT INTO campaign_groups (id, campaign_id, group_id, group_name, instance_id, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            group_id,
+                            campaign_id,
+                            group['group_id'],
+                            group['group_name'],
+                            instance_id,
+                            datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
+
+                conn.commit()
             
             print(f"✅ {len(groups)} grupos adicionados à campanha {campaign_id}")
             self.send_json_response({
@@ -9231,14 +9259,18 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         try:
             from datetime import datetime, timedelta
             import time
-            
-            now = datetime.now()
+            import pytz
+
+            brazil_tz = pytz.timezone('America/Sao_Paulo')
+            now = datetime.now(brazil_tz)
             hour, minute = map(int, schedule_time.split(':'))
-            
+
             if schedule_type == 'once':
                 if schedule_date:
                     target_date = datetime.strptime(schedule_date, '%Y-%m-%d')
-                    target_datetime = target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    target_datetime = brazil_tz.localize(
+                        target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    )
                     if target_datetime > now:
                         return target_datetime.isoformat()
                 return None
