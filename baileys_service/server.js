@@ -420,13 +420,12 @@ app.post('/disconnect/:instanceId', (req, res) => {
 
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
- codex/extend-/send/-instanceid-handler
-    const { to, message, type = 'text', imageUrl, audioUrl, videoUrl } = req.body;
-
+    // Accept individual URLs or a unified mediaUrl
+    const { to, message, type = 'text', imageUrl, audioUrl, videoUrl, mediaUrl, imageData } = req.body;
 
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
-        return res.status(400).json({ error: 'Instância não conectada', instanceId: instanceId });
+        return res.status(400).json({ success: false, error: 'Instância não conectada', instanceId });
     }
 
     try {
@@ -434,52 +433,41 @@ app.post('/send/:instanceId', async (req, res) => {
 
         if (type === 'text') {
             await instance.sock.sendMessage(jid, { text: message });
- codex/extend-/send/-instanceid-handler
         } else if (type === 'image') {
-            if (req.body.imageData) {
-                // Handle image sending (base64)
-                const buffer = Buffer.from(req.body.imageData, 'base64');
-                await instance.sock.sendMessage(jid, {
-                    image: buffer,
-                    caption: message || ''
-                });
-            } else if (imageUrl) {
-                const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-                await instance.sock.sendMessage(jid, {
-                    image: Buffer.from(response.data),
-                    caption: message || ''
-                });
+            if (imageData) {
+                const buffer = Buffer.from(imageData, 'base64');
+                await instance.sock.sendMessage(jid, { image: buffer, caption: message || '' });
             } else {
-                return res.status(400).json({ error: 'Nenhuma imagem fornecida', instanceId: instanceId });
+                const url = imageUrl || mediaUrl;
+                if (!url) {
+                    return res.status(400).json({ success: false, error: 'Nenhuma imagem fornecida', instanceId });
+                }
+                const response = await axios.get(url, { responseType: 'arraybuffer' });
+                await instance.sock.sendMessage(jid, { image: Buffer.from(response.data), caption: message || '' });
             }
         } else if (type === 'audio') {
-            if (!audioUrl) {
-                return res.status(400).json({ error: 'Nenhum áudio fornecido', instanceId: instanceId });
+            const url = audioUrl || mediaUrl;
+            if (!url) {
+                return res.status(400).json({ success: false, error: 'Nenhum áudio fornecido', instanceId });
             }
-            const response = await axios.get(audioUrl, { responseType: 'arraybuffer' });
-            await instance.sock.sendMessage(jid, {
-                audio: Buffer.from(response.data),
-                caption: message || ''
-            });
+            const response = await axios.get(url, { responseType: 'arraybuffer' });
+            await instance.sock.sendMessage(jid, { audio: Buffer.from(response.data), caption: message || '' });
         } else if (type === 'video') {
-            if (!videoUrl) {
-                return res.status(400).json({ error: 'Nenhum vídeo fornecido', instanceId: instanceId });
+            const url = videoUrl || mediaUrl;
+            if (!url) {
+                return res.status(400).json({ success: false, error: 'Nenhum vídeo fornecido', instanceId });
             }
-            const response = await axios.get(videoUrl, { responseType: 'arraybuffer' });
-            await instance.sock.sendMessage(jid, {
-                video: Buffer.from(response.data),
-                caption: message || ''
-            });
+            const response = await axios.get(url, { responseType: 'arraybuffer' });
+            await instance.sock.sendMessage(jid, { video: Buffer.from(response.data), caption: message || '' });
         } else {
-            return res.status(400).json({ error: 'Tipo de mensagem inválido', instanceId: instanceId });
-
+            return res.status(400).json({ success: false, error: 'Tipo de mensagem inválido', instanceId });
         }
 
         console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
-        res.json({ success: true, instanceId: instanceId });
+        res.json({ success: true });
     } catch (error) {
         console.error(`❌ Erro ao enviar mensagem da instância ${instanceId}:`, error);
-        res.status(500).json({ error: error.message, instanceId: instanceId });
+        res.status(500).json({ success: false, error: error.message, instanceId });
     }
 });
 
