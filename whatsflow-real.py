@@ -76,8 +76,8 @@ def resolve_baileys_url() -> str:
                 )
         except requests.RequestException as e:
             print(f"⚠️ Falha ao acessar Baileys em {url}/health: {e}")
-    print("❌ Baileys service não acessível em nenhuma URL. Usando http://localhost:3002")
-    return "http://localhost:3002"
+    print("❌ Baileys service não acessível em nenhuma URL. Usando http://78.46.250.112:3002")
+    return "http://78.46.250.112:3002"
 
 
 API_BASE_URL = resolve_baileys_url()
