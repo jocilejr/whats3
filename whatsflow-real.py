@@ -40,10 +40,8 @@ DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
 
- codex/corrigir-erro-de-conexao-com-baileys-wjafpj
 # Candidate URLs for the Baileys service. We try to auto-discover the machine's
 # public IP so the script works even when the server address changes.
-
 
 def guess_public_baileys_url() -> Optional[str]:
     """Return Baileys URL using the machine's public IP if available."""
@@ -78,8 +76,8 @@ def resolve_baileys_url() -> str:
                 )
         except requests.RequestException as e:
             print(f"⚠️ Falha ao acessar Baileys em {url}/health: {e}")
-    print("❌ Baileys service não acessível em nenhuma URL. Usando http://localhost:3002")
-    return "http://localhost:3002"
+    print("❌ Baileys service não acessível em nenhuma URL. Usando http://78.46.250.112:3002")
+    return "http://78.46.250.112:3002"
 
 
 API_BASE_URL = resolve_baileys_url()
