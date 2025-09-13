@@ -7629,120 +7629,143 @@ class MessageScheduler:
     def _check_and_send_scheduled_messages(self):
         """Check for messages that need to be sent"""
         conn = None
-        try:
-            brazil_tz = pytz.timezone('America/Sao_Paulo')
-            now_brazil = datetime.now(brazil_tz)
+        max_retries = 3
+        
+        for attempt in range(max_retries):
+            try:
+                brazil_tz = pytz.timezone('America/Sao_Paulo')
+                now_brazil = datetime.now(brazil_tz)
 
-            conn = sqlite3.connect(DB_FILE, timeout=30)
-            cursor = conn.cursor()
-            
-            # Get messages that need to be sent (next_run <= now and active)
-            cursor.execute("""
-                SELECT sm.*, smg.group_id, smg.group_name, smg.instance_id
-                FROM scheduled_messages sm
-                LEFT JOIN scheduled_message_groups smg ON sm.id = smg.message_id
-                WHERE sm.is_active = 1 
-                AND sm.next_run IS NOT NULL 
-                AND datetime(sm.next_run) <= datetime(?)
-            """, (now_brazil.isoformat(),))
-            
-            messages_to_send = cursor.fetchall()
+                # Use WAL mode and longer timeout for better concurrency
+                conn = sqlite3.connect(DB_FILE, timeout=60)
+                conn.execute('PRAGMA journal_mode=WAL')
+                conn.execute('PRAGMA synchronous=NORMAL')
+                conn.execute('PRAGMA cache_size=10000')
+                conn.execute('PRAGMA temp_store=memory')
+                cursor = conn.cursor()
+                
+                # Get messages that need to be sent (next_run <= now and active)
+                cursor.execute("""
+                    SELECT sm.*, smg.group_id, smg.group_name, smg.instance_id
+                    FROM scheduled_messages sm
+                    LEFT JOIN scheduled_message_groups smg ON sm.id = smg.message_id
+                    WHERE sm.is_active = 1 
+                    AND sm.next_run IS NOT NULL 
+                    AND datetime(sm.next_run) <= datetime(?)
+                """, (now_brazil.isoformat(),))
+                
+                messages_to_send = cursor.fetchall()
 
-            for row in messages_to_send:
-                try:
-                    message_id = row[0]
-                    message_text = row[2]
-                    message_type = row[3]
-                    media_url = row[4]
-                    schedule_type = row[5]
-                    schedule_time = row[6]
-                    schedule_days = row[7]
-                    schedule_date = row[8]
-                    # Columns after sm.* begin at index 12
-                    group_id = row[12]
-                    group_name = row[13]
-                    instance_id = row[14]
-                    
-                    if not group_id or not instance_id:
-                        print(f"⚠️ Mensagem {message_id} sem grupo ou instância definidos")
-                        continue
-                    
-                    # Send message
-                    success, error_message = self._send_message_to_group(
-                        instance_id, group_id, message_text, message_type, media_url
-                    )
-
-                    if success:
-                        print(f"✅ Mensagem enviada para {group_name} via instância {instance_id}")
+                for row in messages_to_send:
+                    try:
+                        message_id = row[0]
+                        message_text = row[2]
+                        message_type = row[3]
+                        media_url = row[4]
+                        schedule_type = row[5]
+                        schedule_time = row[6]
+                        schedule_days = row[7]
+                        schedule_date = row[8]
+                        # Columns after sm.* begin at index 12
+                        group_id = row[12]
+                        group_name = row[13]
+                        instance_id = row[14]
                         
-                        # Log success using shared cursor/connection
-                        self._log_message_sent(
-                            message_id,
-                            group_id,
-                            group_name,
-                            message_text,
-                            'sent',
-                            instance_id,
-                            cursor=cursor,
+                        if not group_id or not instance_id:
+                            print(f"⚠️ Mensagem {message_id} sem grupo ou instância definidos")
+                            continue
+                        
+                        # Send message
+                        success, error_message = self._send_message_to_group(
+                            instance_id, group_id, message_text, message_type, media_url
                         )
-                        
-                        # Calculate next run if recurring
-                        if schedule_type == 'weekly':
-                            next_run = self._calculate_next_weekly_run(
-                                schedule_time, json.loads(schedule_days or '[]'), brazil_tz
+
+                        if success:
+                            print(f"✅ Mensagem enviada para {group_name} via instância {instance_id}")
+                            
+                            # Log success using shared cursor/connection
+                            self._log_message_sent(
+                                message_id,
+                                group_id,
+                                group_name,
+                                message_text,
+                                'sent',
+                                instance_id,
+                                cursor=cursor,
                             )
                             
-                            cursor.execute("""
-                                UPDATE scheduled_messages 
-                                SET next_run = ?
-                                WHERE id = ?
-                            """, (next_run, message_id))
+                            # Calculate next run if recurring
+                            if schedule_type == 'weekly':
+                                next_run = self._calculate_next_weekly_run(
+                                    schedule_time, json.loads(schedule_days or '[]'), brazil_tz
+                                )
+                                
+                                cursor.execute("""
+                                    UPDATE scheduled_messages 
+                                    SET next_run = ?
+                                    WHERE id = ?
+                                """, (next_run, message_id))
+                            else:
+                                # For 'once' type, deactivate after sending
+                                cursor.execute("""
+                                    UPDATE scheduled_messages 
+                                    SET is_active = 0, next_run = NULL
+                                    WHERE id = ?
+                                """, (message_id,))
                         else:
-                            # For 'once' type, deactivate after sending
-                            cursor.execute("""
-                                UPDATE scheduled_messages 
-                                SET is_active = 0, next_run = NULL
-                                WHERE id = ?
-                            """, (message_id,))
-                    else:
-                        print(
-                            f"❌ Falha ao enviar mensagem para {group_name}: {error_message}"
-                        )
+                            print(
+                                f"❌ Falha ao enviar mensagem para {group_name}: {error_message}"
+                            )
 
-                        # Log failure using shared cursor/connection
-                        self._log_message_sent(
-                            message_id,
-                            group_id,
-                            group_name,
-                            message_text,
-                            'failed',
-                            instance_id,
-                            error_message,
-                            cursor=cursor,
-                        )
+                            # Log failure using shared cursor/connection
+                            self._log_message_sent(
+                                message_id,
+                                group_id,
+                                group_name,
+                                message_text,
+                                'failed',
+                                instance_id,
+                                error_message,
+                                cursor=cursor,
+                            )
+                            
+                            # Only retry in 5 minutes for network errors, not instance errors
+                            if "não conectada" not in str(error_message).lower():
+                                retry_time = now_brazil + timedelta(minutes=5)
+                                cursor.execute("""
+                                    UPDATE scheduled_messages 
+                                    SET next_run = ?
+                                    WHERE id = ?
+                                """, (retry_time.isoformat(), message_id))
                         
-                        # Retry in 5 minutes for failed messages
-                        retry_time = now_brazil + timedelta(minutes=5)
-                        cursor.execute("""
-                            UPDATE scheduled_messages 
-                            SET next_run = ?
-                            WHERE id = ?
-                        """, (retry_time.isoformat(), message_id))
-                    
-                except Exception as e:
-                    print(f"❌ Erro ao processar mensagem agendada {row[0] if row else 'unknown'}: {e}")
+                    except Exception as e:
+                        print(f"❌ Erro ao processar mensagem: {e}")
+                        continue
+                
+                conn.commit()
+
+                if messages_to_send:
+                    print(f"📤 Processadas {len(messages_to_send)} mensagens agendadas")
+                
+                # Success - break retry loop
+                break
+                
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2  # Exponential backoff: 2s, 4s, 6s
+                    print(f"⚠️ Database bloqueado, tentativa {attempt + 1}/{max_retries}. Aguardando {wait_time}s...")
+                    time.sleep(wait_time)
                     continue
-            
-            conn.commit()
-
-            if messages_to_send:
-                print(f"📤 Processadas {len(messages_to_send)} mensagens agendadas")
-
-        except Exception as e:
-            print(f"❌ Erro ao verificar mensagens agendadas: {e}")
-        finally:
-            if conn:
-                conn.close()
+                else:
+                    print(f"❌ Erro no banco de dados após {attempt + 1} tentativas: {e}")
+                    break
+            except Exception as e:
+                print(f"❌ Erro ao verificar mensagens agendadas: {e}")
+                break
+            finally:
+                if conn:
+                    conn.close()
+                    conn = None
     
     def _send_message_to_group(self, instance_id, group_id, message_text, message_type, media_url):
         """Send message to group via Baileys API"""
