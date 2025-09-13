@@ -7566,9 +7566,9 @@ class MessageScheduler:
                     schedule_time = row[6]
                     schedule_days = row[7]
                     schedule_date = row[8]
-                    group_id = row[11] if len(row) > 11 else None
-                    group_name = row[12] if len(row) > 12 else 'Grupo'
-                    instance_id = row[13] if len(row) > 13 else None
+                    group_id = row[12] if len(row) > 12 else None
+                    group_name = row[13] if len(row) > 13 else 'Grupo'
+                    instance_id = row[14] if len(row) > 14 else None
                     
                     if not group_id or not instance_id:
                         print(f"⚠️ Mensagem {message_id} sem grupo ou instância definidos")
@@ -9195,24 +9195,26 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT * FROM scheduled_messages 
+                SELECT * FROM scheduled_messages
                 WHERE campaign_id = ?
                 ORDER BY created_at DESC
             """, (campaign_id,))
-            
+
             schedules = []
             for row in cursor.fetchall():
                 schedules.append({
                     'id': row[0],
                     'campaign_id': row[1],
                     'message_text': row[2],
-                    'schedule_type': row[3],
-                    'schedule_time': row[4],
-                    'schedule_days': json.loads(row[5]) if row[5] else None,
-                    'schedule_date': row[6],
-                    'is_active': bool(row[7]),
-                    'next_run': row[8],
-                    'created_at': row[9]
+                    'message_type': row[3],
+                    'media_url': row[4],
+                    'schedule_type': row[5],
+                    'schedule_time': row[6],
+                    'schedule_days': json.loads(row[7]) if row[7] else None,
+                    'schedule_date': row[8],
+                    'is_active': bool(row[9]),
+                    'next_run': row[10],
+                    'created_at': row[11]
                 })
             
             conn.close()
@@ -9425,10 +9427,11 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                     'schedule_type': row[5],
                     'schedule_time': row[6],
                     'schedule_days': row[7],
-                    'is_active': bool(row[8]),
-                    'next_run': row[9],
-                    'created_at': row[10],
-                    'groups_count': row[11]
+                    'schedule_date': row[8],
+                    'is_active': bool(row[9]),
+                    'next_run': row[10],
+                    'created_at': row[11],
+                    'groups_count': row[12]
                 })
             
             conn.close()
