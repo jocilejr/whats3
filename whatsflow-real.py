@@ -7537,10 +7537,11 @@ class MessageScheduler:
     
     def _check_and_send_scheduled_messages(self):
         """Check for messages that need to be sent"""
+        conn = None
         try:
             brazil_tz = pytz.timezone('America/Sao_Paulo')
             now_brazil = datetime.now(brazil_tz)
-            
+
             conn = sqlite3.connect(DB_FILE, timeout=30)
             cursor = conn.cursor()
             
@@ -7639,13 +7640,15 @@ class MessageScheduler:
                     continue
             
             conn.commit()
-            conn.close()
-            
+
             if messages_to_send:
                 print(f"📤 Processadas {len(messages_to_send)} mensagens agendadas")
-                
+
         except Exception as e:
             print(f"❌ Erro ao verificar mensagens agendadas: {e}")
+        finally:
+            if conn:
+                conn.close()
     
     def _send_message_to_group(self, instance_id, group_id, message_text, message_type, media_url):
         """Send message to group via Baileys API"""
