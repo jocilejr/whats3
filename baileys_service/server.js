@@ -420,7 +420,9 @@ app.post('/disconnect/:instanceId', (req, res) => {
 
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
+ codex/extend-/send/-instanceid-handler
     const { to, message, type = 'text', imageUrl, audioUrl, videoUrl } = req.body;
+
 
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
@@ -432,6 +434,7 @@ app.post('/send/:instanceId', async (req, res) => {
 
         if (type === 'text') {
             await instance.sock.sendMessage(jid, { text: message });
+ codex/extend-/send/-instanceid-handler
         } else if (type === 'image') {
             if (req.body.imageData) {
                 // Handle image sending (base64)
@@ -469,6 +472,7 @@ app.post('/send/:instanceId', async (req, res) => {
             });
         } else {
             return res.status(400).json({ error: 'Tipo de mensagem inválido', instanceId: instanceId });
+
         }
 
         console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);

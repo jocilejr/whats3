@@ -7566,9 +7566,9 @@ class MessageScheduler:
                     schedule_time = row[6]
                     schedule_days = row[7]
                     schedule_date = row[8]
-                    group_id = row[12] if len(row) > 12 else None
-                    group_name = row[13] if len(row) > 13 else 'Grupo'
-                    instance_id = row[14] if len(row) > 14 else None
+                    group_id = row[12]
+                    group_name = row[13]
+                    instance_id = row[14]
                     
                     if not group_id or not instance_id:
                         print(f"⚠️ Mensagem {message_id} sem grupo ou instância definidos")
@@ -7650,29 +7650,34 @@ class MessageScheduler:
     def _send_message_to_group(self, instance_id, group_id, message_text, message_type, media_url):
         """Send message to group via Baileys API"""
         try:
-            payload = {
-                'to': group_id,
-                'message': message_text or '',
-                'type': message_type
-            }
-            
-            # Add media URL for non-text messages
-            if message_type != 'text' and media_url:
-                if message_type == 'image':
-                    payload['imageUrl'] = media_url
-                elif message_type == 'audio':
-                    payload['audioUrl'] = media_url  
-                elif message_type == 'video':
-                    payload['videoUrl'] = media_url
-            
+            if message_type == 'text':
+                payload = {
+                    'to': group_id,
+                    'type': 'text',
+                    'message': message_text or ''
+                }
+            else:
+                payload = {
+                    'to': group_id,
+                    'type': message_type,
+                    'mediaUrl': media_url,
+                }
+                if message_text:
+                    payload['caption'] = message_text
+
             response = requests.post(
                 f"{self.api_base_url}/send/{instance_id}",
                 json=payload,
                 timeout=30
             )
-            
+
+            if response.status_code != 200:
+                logger.error(
+                    f"Baileys send failed ({response.status_code}): {response.text}"
+                )
+
             return response.status_code == 200
-            
+
         except Exception as e:
             print(f"❌ Erro ao enviar via Baileys: {e}")
             return False
