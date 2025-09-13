@@ -3827,18 +3827,27 @@ HTML_APP = '''<!DOCTYPE html>
         function startChat(phone, name) {
             const message = prompt(`💬 Enviar mensagem para ${name} (${phone}):`);
             if (message && message.trim()) {
-                sendMessage(phone, message.trim());
+                const mediaUrl = prompt('🔗 URL da mídia (deixe em branco para enviar texto):', '')?.trim();
+                let type = 'text';
+                if (mediaUrl) {
+                    type = prompt('📎 Tipo da mídia (image, audio, video):', 'image') || 'image';
+                }
+                sendQuickMessage(phone, message.trim(), type, mediaUrl);
             }
         }
 
-        async function sendMessage(phone, message) {
+        async function sendQuickMessage(phone, message, type = 'text', mediaUrl = '') {
             try {
+                const payload = { to: phone, message: message, type: type };
+                if (mediaUrl && type !== 'text') {
+                    payload.mediaUrl = mediaUrl;
+                }
                 const response = await fetch(`${API_BASE_URL}/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ to: phone, message: message })
+                    body: JSON.stringify(payload)
                 });
-                
+
                 if (response.ok) {
                     alert('✅ Mensagem enviada com sucesso!');
                 } else {
@@ -4192,17 +4201,30 @@ HTML_APP = '''<!DOCTYPE html>
             
             try {
                 console.log('📤 Enviando mensagem para:', currentChat.phone, 'via instância:', currentChat.instanceId);
-                
+
                 // First check if Baileys service is available
                 const healthResponse = await fetch(`${API_BASE_URL}/health`, {
                     method: 'GET',
                     timeout: 5000
                 });
-                
+
                 if (!healthResponse.ok) {
                     throw new Error('Serviço Baileys não está disponível');
                 }
-                
+
+                // Prepare payload supporting media messages
+                const mediaUrlInput = document.getElementById('manualMediaUrl');
+                const messageTypeSelect = document.getElementById('manualMessageType');
+                const mediaUrl = mediaUrlInput ? mediaUrlInput.value.trim() : '';
+                const payload = {
+                    to: currentChat.phone,
+                    message: message,
+                    type: mediaUrl ? (messageTypeSelect ? messageTypeSelect.value : 'image') : 'text'
+                };
+                if (mediaUrl) {
+                    payload.mediaUrl = mediaUrl;
+                }
+
                 // Use Baileys service to send message with corrected URL and proper error handling
                 const response = await fetch(`${API_BASE_URL}/send/${currentChat.instanceId}`, {
                     method: 'POST',
@@ -4210,11 +4232,7 @@ HTML_APP = '''<!DOCTYPE html>
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({
-                        to: currentChat.phone,
-                        message: message,
-                        type: 'text'
-                    })
+                    body: JSON.stringify(payload)
                 });
                 
                 if (!response.ok) {
@@ -4234,6 +4252,7 @@ HTML_APP = '''<!DOCTYPE html>
                 
                 if (result.success) {
                     messageInput.value = '';
+                    if (mediaUrlInput) mediaUrlInput.value = '';
                     
                     // Add message to UI immediately for better UX
                     const container = document.getElementById('messagesContainer');
@@ -4674,32 +4693,43 @@ HTML_APP = '''<!DOCTYPE html>
         async function sendToGroup(groupId, groupName) {
             const message = prompt(`💬 Enviar mensagem para o grupo "${groupName}":`, '');
             if (!message || !message.trim()) return;
-            
+
             const instanceId = document.getElementById('groupInstanceSelect').value;
             if (!instanceId) {
                 alert('❌ Selecione uma instância primeiro');
                 return;
             }
-            
+
+            const mediaUrl = prompt('🔗 URL da mídia (deixe em branco para enviar somente texto):', '')?.trim();
+            let messageType = 'text';
+            if (mediaUrl) {
+                messageType = prompt('📎 Tipo da mídia (image, audio, video):', 'image') || 'image';
+            }
+
+            const payload = {
+                to: groupId,
+                message: message.trim(),
+                type: messageType
+            };
+            if (mediaUrl) {
+                payload.mediaUrl = mediaUrl;
+            }
+
             try {
                 const response = await fetch(`${API_BASE_URL}/send/${instanceId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to: groupId,
-                        message: message.trim(),
-                        type: 'text'
-                    })
+                    body: JSON.stringify(payload)
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (response.ok && result.success) {
                     alert('✅ Mensagem enviada para o grupo com sucesso!');
                 } else {
                     throw new Error(result.error || 'Erro ao enviar mensagem');
                 }
-                
+
             } catch (error) {
                 console.error('❌ Erro ao enviar mensagem para grupo:', error);
                 alert(`❌ Erro ao enviar mensagem: ${error.message}`);
