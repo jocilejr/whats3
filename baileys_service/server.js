@@ -5,6 +5,7 @@ const makeWASocket = require('@whiskeysockets/baileys').default;
 const qrTerminal = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 
 const app = express();
 app.use(cors({
