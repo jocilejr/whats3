@@ -5,6 +5,7 @@ const makeWASocket = require('@whiskeysockets/baileys').default;
 const qrTerminal = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 
 const app = express();
 app.use(cors({
@@ -419,7 +420,9 @@ app.post('/disconnect/:instanceId', (req, res) => {
 
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    const { to, message, type = 'text', mediaUrl, caption } = req.body;
+ codex/extend-/send/-instanceid-handler
+    const { to, message, type = 'text', imageUrl, audioUrl, videoUrl } = req.body;
+
 
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
@@ -431,27 +434,45 @@ app.post('/send/:instanceId', async (req, res) => {
 
         if (type === 'text') {
             await instance.sock.sendMessage(jid, { text: message });
-        } else if (mediaUrl) {
-            const content = {};
-            if (type === 'image') {
-                content.image = { url: mediaUrl };
-            } else if (type === 'video') {
-                content.video = { url: mediaUrl };
-            } else if (type === 'audio') {
-                content.audio = { url: mediaUrl };
-            } else if (type === 'document') {
-                content.document = { url: mediaUrl };
+ codex/extend-/send/-instanceid-handler
+        } else if (type === 'image') {
+            if (req.body.imageData) {
+                // Handle image sending (base64)
+                const buffer = Buffer.from(req.body.imageData, 'base64');
+                await instance.sock.sendMessage(jid, {
+                    image: buffer,
+                    caption: message || ''
+                });
+            } else if (imageUrl) {
+                const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+                await instance.sock.sendMessage(jid, {
+                    image: Buffer.from(response.data),
+                    caption: message || ''
+                });
             } else {
-                return res.status(400).json({ error: `Tipo de mídia não suportado: ${type}`, instanceId: instanceId });
+                return res.status(400).json({ error: 'Nenhuma imagem fornecida', instanceId: instanceId });
             }
-
-            if (caption) {
-                content.caption = caption;
+        } else if (type === 'audio') {
+            if (!audioUrl) {
+                return res.status(400).json({ error: 'Nenhum áudio fornecido', instanceId: instanceId });
             }
-
-            await instance.sock.sendMessage(jid, content);
+            const response = await axios.get(audioUrl, { responseType: 'arraybuffer' });
+            await instance.sock.sendMessage(jid, {
+                audio: Buffer.from(response.data),
+                caption: message || ''
+            });
+        } else if (type === 'video') {
+            if (!videoUrl) {
+                return res.status(400).json({ error: 'Nenhum vídeo fornecido', instanceId: instanceId });
+            }
+            const response = await axios.get(videoUrl, { responseType: 'arraybuffer' });
+            await instance.sock.sendMessage(jid, {
+                video: Buffer.from(response.data),
+                caption: message || ''
+            });
         } else {
-            return res.status(400).json({ error: 'mediaUrl é necessário para enviar mídia', instanceId: instanceId });
+            return res.status(400).json({ error: 'Tipo de mensagem inválido', instanceId: instanceId });
+
         }
 
         console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
