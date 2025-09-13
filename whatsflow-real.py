@@ -7638,10 +7638,10 @@ class MessageScheduler:
                         continue
                     
                     # Send message
-                    success = self._send_message_to_group(
+                    success, error_message = self._send_message_to_group(
                         instance_id, group_id, message_text, message_type, media_url
                     )
-                    
+
                     if success:
                         print(f"✅ Mensagem enviada para {group_name} via instância {instance_id}")
                         
@@ -7675,8 +7675,10 @@ class MessageScheduler:
                                 WHERE id = ?
                             """, (message_id,))
                     else:
-                        print(f"❌ Falha ao enviar mensagem para {group_name}")
-                        
+                        print(
+                            f"❌ Falha ao enviar mensagem para {group_name}: {error_message}"
+                        )
+
                         # Log failure using shared cursor/connection
                         self._log_message_sent(
                             message_id,
@@ -7685,7 +7687,7 @@ class MessageScheduler:
                             message_text,
                             'failed',
                             instance_id,
-                            'Erro na conexão com Baileys',
+                            error_message,
                             cursor=cursor,
                         )
                         
@@ -7715,6 +7717,12 @@ class MessageScheduler:
     def _send_message_to_group(self, instance_id, group_id, message_text, message_type, media_url):
         """Send message to group via Baileys API"""
         try:
+            # Ensure the Baileys service is available before attempting to send
+            if not check_service_health(self.api_base_url):
+                error_msg = f"Baileys service indisponível em {self.api_base_url}"
+                print(f"❌ {error_msg}")
+                return False, error_msg
+
             if message_type == 'text':
                 payload = {
                     'to': group_id,
@@ -7737,15 +7745,18 @@ class MessageScheduler:
             )
 
             if response.status_code != 200:
-                logger.error(
+                error_msg = (
                     f"Baileys send failed ({response.status_code}): {response.text}"
                 )
+                logger.error(error_msg)
+                return False, error_msg
 
-            return response.status_code == 200
+            return True, None
 
         except Exception as e:
-            print(f"❌ Erro ao enviar via Baileys: {e}")
-            return False
+            error_msg = f"Erro ao enviar via Baileys: {e}"
+            print(f"❌ {error_msg}")
+            return False, error_msg
     
     def _calculate_next_weekly_run(self, schedule_time, schedule_days, brazil_tz):
         """Calculate next weekly run"""
