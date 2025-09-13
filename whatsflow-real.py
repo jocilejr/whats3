@@ -7566,6 +7566,7 @@ class MessageScheduler:
                     schedule_time = row[6]
                     schedule_days = row[7]
                     schedule_date = row[8]
+                    # Extract group details from joined scheduled_message_groups table
                     group_id = row[12]
                     group_name = row[13]
                     instance_id = row[14]
