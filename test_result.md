@@ -282,10 +282,10 @@ metadata:
 
 test_plan:
   current_focus:
-    - "URL corrections validation complete - groups/campaigns functionality 100% operational"
+    - "Media URL corrections validation complete - system 90% operational"
   stuck_tasks: []
   test_all: false
-  test_priority: "url_corrections_validation_complete"
+  test_priority: "media_corrections_validation_complete"
 
 agent_communication:
   - agent: "testing"
