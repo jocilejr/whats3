@@ -7770,6 +7770,15 @@ class MessageScheduler:
 
             for attempt in range(3):
                 try:
+                    log_details = f"message_type={message_type}, media_url={media_url}"
+                    if message_type == 'text':
+                        logger.info(
+                            f"📤 Enviando mensagem de texto ao grupo {group_id} ({log_details})"
+                        )
+                    else:
+                        logger.info(
+                            f"📤 Enviando mensagem de mídia ao grupo {group_id} ({log_details})"
+                        )
                     response = requests.post(
                         f"{self.api_base_url}/send/{instance_id}",
                         json=payload,
