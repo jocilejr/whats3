@@ -419,27 +419,40 @@ app.post('/disconnect/:instanceId', (req, res) => {
 
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    const { to, message, type = 'text' } = req.body;
-    
+    const { to, message, type = 'text', imageData, mediaUrl, fileName } = req.body;
+
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
         return res.status(400).json({ error: 'Instância não conectada', instanceId: instanceId });
     }
-    
+
     try {
         const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
-        
+        const caption = message || '';
+        const mediaTypes = ['image', 'video', 'audio', 'document'];
+
         if (type === 'text') {
             await instance.sock.sendMessage(jid, { text: message });
-        } else if (type === 'image' && req.body.imageData) {
-            // Handle image sending (base64)
-            const buffer = Buffer.from(req.body.imageData, 'base64');
-            await instance.sock.sendMessage(jid, { 
-                image: buffer,
-                caption: message || ''
-            });
+        } else if (mediaTypes.includes(type)) {
+            if (!imageData && !mediaUrl) {
+                return res.status(400).json({ error: 'Missing media data' });
+            }
+
+            if (type === 'image' && imageData) {
+                // Handle image sending (base64)
+                const buffer = Buffer.from(imageData, 'base64');
+                await instance.sock.sendMessage(jid, { image: buffer, caption });
+            } else {
+                const msg = { [type]: { url: mediaUrl }, caption };
+                if (type === 'document' && fileName) {
+                    msg.fileName = fileName;
+                }
+                await instance.sock.sendMessage(jid, msg);
+            }
+        } else {
+            return res.status(400).json({ error: `Unsupported message type: ${type}` });
         }
-        
+
         console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
         res.json({ success: true, instanceId: instanceId });
     } catch (error) {
