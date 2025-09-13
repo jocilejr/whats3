@@ -45,6 +45,22 @@ WEBSOCKET_PORT = 8890
 if WEBSOCKETS_AVAILABLE:
     websocket_clients: Set[websockets.WebSocketServerProtocol] = set()
 
+# Health check for Baileys service
+def check_service_health(api_base_url: str) -> bool:
+    """Check if the Baileys service is reachable."""
+    url = f"{api_base_url}/health"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            print(f"✅ Baileys service disponível em {api_base_url}")
+            return True
+        else:
+            print(f"⚠️ Baileys service respondeu com status {response.status_code} ({url})")
+            return False
+    except requests.RequestException as e:
+        print(f"❌ Não foi possível acessar Baileys em {url}: {e}")
+        return False
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -7473,6 +7489,7 @@ app.listen(PORT, '0.0.0.0', () => {
                 time.sleep(3)
                 if self.process.poll() is None:
                     print("✅ Baileys iniciado com sucesso!")
+                    check_service_health(API_BASE_URL)
                     return True
                 else:
                     stdout, stderr = self.process.communicate()
