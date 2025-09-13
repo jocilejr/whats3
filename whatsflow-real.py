@@ -21,7 +21,7 @@ import signal
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
 import logging
-from typing import Set, Dict, Any
+from typing import Set, Dict, Any, Optional
 from datetime import timedelta
 import pytz
 import requests
@@ -38,8 +38,49 @@ except ImportError:
 # Configurações
 DB_FILE = "whatsflow.db"
 PORT = 8889
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://78.46.250.112:3002")
 WEBSOCKET_PORT = 8890
+
+# Candidate URLs for the Baileys service. We try to auto-discover the machine's
+# public IP so the script works even when the server address changes.
+
+
+def guess_public_baileys_url() -> Optional[str]:
+    """Return Baileys URL using the machine's public IP if available."""
+    try:
+        ip = requests.get("https://api.ipify.org", timeout=5).text.strip()
+        return f"http://{ip}:3002"
+    except requests.RequestException:
+        return None
+
+
+DEFAULT_BAILEYS_URLS = [
+    guess_public_baileys_url(),
+    os.environ.get("API_BASE_URL"),
+    "http://78.46.250.112:3002",
+    "http://127.0.0.1:3002",
+    "http://localhost:3002",
+]
+
+
+def resolve_baileys_url() -> str:
+    """Return the first reachable Baileys service URL."""
+    for url in [u for u in DEFAULT_BAILEYS_URLS if u]:
+        try:
+            response = requests.get(f"{url}/health", timeout=5)
+            if response.status_code == 200:
+                print(f"✅ Baileys service disponível em {url}")
+                return url
+            else:
+                print(
+                    f"⚠️ Baileys service respondeu com status {response.status_code} ({url}/health)"
+                )
+        except requests.RequestException as e:
+            print(f"⚠️ Falha ao acessar Baileys em {url}/health: {e}")
+    print("❌ Baileys service não acessível em nenhuma URL. Usando http://localhost:3002")
+    return "http://localhost:3002"
+
+
+API_BASE_URL = resolve_baileys_url()
 
 # WebSocket clients management
 if WEBSOCKETS_AVAILABLE:

@@ -16,8 +16,10 @@ import time
 import signal
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
+import urllib.request
 import logging
-from typing import Set, Dict, Any
+from typing import Set, Dict, Any, Optional
+import requests
 
 # Try to import websockets, fallback gracefully if not available
 try:
@@ -31,8 +33,49 @@ except ImportError:
 # Configurações
 DB_FILE = "whatsflow.db"
 PORT = 8889
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:3002")
 WEBSOCKET_PORT = 8890
+
+# Try to discover a reachable Baileys service. We attempt to detect the server's
+# public IP before falling back to environment or local addresses.
+
+
+def guess_public_baileys_url() -> Optional[str]:
+    """Return Baileys URL using the machine's public IP if available."""
+    try:
+        ip = requests.get("https://api.ipify.org", timeout=5).text.strip()
+        return f"http://{ip}:3002"
+    except requests.RequestException:
+        return None
+
+
+DEFAULT_BAILEYS_URLS = [
+    guess_public_baileys_url(),
+    os.environ.get("API_BASE_URL"),
+    "http://78.46.250.112:3002",
+    "http://127.0.0.1:3002",
+    "http://localhost:3002",
+]
+
+
+def resolve_baileys_url() -> str:
+    """Return the first reachable Baileys service URL."""
+    for url in [u for u in DEFAULT_BAILEYS_URLS if u]:
+        try:
+            with urllib.request.urlopen(f"{url}/health", timeout=3) as response:
+                if response.status == 200:
+                    print(f"✅ Baileys service disponível em {url}")
+                    return url
+                else:
+                    print(
+                        f"⚠️ Baileys service respondeu com status {response.status} ({url}/health)"
+                    )
+        except Exception as e:
+            print(f"⚠️ Falha ao acessar Baileys em {url}/health: {e}")
+    print("❌ Baileys service não acessível em nenhuma URL. Usando http://localhost:3002")
+    return "http://localhost:3002"
+
+
+API_BASE_URL = resolve_baileys_url()
 
 # WebSocket clients management
 websocket_clients: Set[websockets.WebSocketServerProtocol] = set()
