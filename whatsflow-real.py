@@ -21,7 +21,7 @@ import signal
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
 import logging
-from typing import Set, Dict, Any
+from typing import Set, Dict, Any, Optional
 from datetime import timedelta
 import pytz
 import requests
@@ -40,13 +40,24 @@ DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
 
-# Candidate URLs for the Baileys service. The environment variable takes
-# precedence, but we also try common fallbacks to avoid hard failures when the
-# configured host is unreachable.
+ codex/corrigir-erro-de-conexao-com-baileys-wjafpj
+# Candidate URLs for the Baileys service. We try to auto-discover the machine's
+# public IP so the script works even when the server address changes.
+
+
+def guess_public_baileys_url() -> Optional[str]:
+    """Return Baileys URL using the machine's public IP if available."""
+    try:
+        ip = requests.get("https://api.ipify.org", timeout=5).text.strip()
+        return f"http://{ip}:3002"
+    except requests.RequestException:
+        return None
+
+
 DEFAULT_BAILEYS_URLS = [
- codex/corrigir-erro-de-conexao-com-baileys-nohzrw
-    "http://78.46.250.112:3002",
+    guess_public_baileys_url(),
     os.environ.get("API_BASE_URL"),
+    "http://78.46.250.112:3002",
 
     "http://127.0.0.1:3002",
     "http://localhost:3002",

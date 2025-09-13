@@ -18,7 +18,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
 import urllib.request
 import logging
-from typing import Set, Dict, Any
+from typing import Set, Dict, Any, Optional
+import requests
 
 # Try to import websockets, fallback gracefully if not available
 try:
@@ -34,12 +35,24 @@ DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
 
-# Try to discover a reachable Baileys service. The environment variable takes
-# precedence, but we also try common local addresses.
+ codex/corrigir-erro-de-conexao-com-baileys-wjafpj
+# Try to discover a reachable Baileys service. We attempt to detect the server's
+# public IP before falling back to environment or local addresses.
+
+
+def guess_public_baileys_url() -> Optional[str]:
+    """Return Baileys URL using the machine's public IP if available."""
+    try:
+        ip = requests.get("https://api.ipify.org", timeout=5).text.strip()
+        return f"http://{ip}:3002"
+    except requests.RequestException:
+        return None
+
+
 DEFAULT_BAILEYS_URLS = [
- codex/corrigir-erro-de-conexao-com-baileys-nohzrw
-    "http://78.46.250.112:3002",
+    guess_public_baileys_url(),
     os.environ.get("API_BASE_URL"),
+    "http://78.46.250.112:3002",
 
     "http://127.0.0.1:3002",
     "http://localhost:3002",
