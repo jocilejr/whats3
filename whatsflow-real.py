@@ -7567,9 +7567,7 @@ class MessageScheduler:
                     schedule_time = row[6]
                     schedule_days = row[7]
                     schedule_date = row[8]
- codex/update-variable-assignments-in-_check_and_send_scheduled_mes
-                    # Extract group details from joined scheduled_message_groups table
-
+                    # Columns after sm.* begin at index 12
                     group_id = row[12]
                     group_name = row[13]
                     instance_id = row[14]
