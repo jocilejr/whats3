@@ -5,6 +5,7 @@ const makeWASocket = require('@whiskeysockets/baileys').default;
 const qrTerminal = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 
 const app = express();
 app.use(cors({
@@ -419,27 +420,57 @@ app.post('/disconnect/:instanceId', (req, res) => {
 
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    const { to, message, type = 'text' } = req.body;
-    
+    const { to, message, type = 'text', imageUrl, audioUrl, videoUrl } = req.body;
+
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
         return res.status(400).json({ error: 'Instância não conectada', instanceId: instanceId });
     }
-    
+
     try {
         const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
-        
+
         if (type === 'text') {
             await instance.sock.sendMessage(jid, { text: message });
-        } else if (type === 'image' && req.body.imageData) {
-            // Handle image sending (base64)
-            const buffer = Buffer.from(req.body.imageData, 'base64');
-            await instance.sock.sendMessage(jid, { 
-                image: buffer,
+        } else if (type === 'image') {
+            if (req.body.imageData) {
+                // Handle image sending (base64)
+                const buffer = Buffer.from(req.body.imageData, 'base64');
+                await instance.sock.sendMessage(jid, {
+                    image: buffer,
+                    caption: message || ''
+                });
+            } else if (imageUrl) {
+                const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+                await instance.sock.sendMessage(jid, {
+                    image: Buffer.from(response.data),
+                    caption: message || ''
+                });
+            } else {
+                return res.status(400).json({ error: 'Nenhuma imagem fornecida', instanceId: instanceId });
+            }
+        } else if (type === 'audio') {
+            if (!audioUrl) {
+                return res.status(400).json({ error: 'Nenhum áudio fornecido', instanceId: instanceId });
+            }
+            const response = await axios.get(audioUrl, { responseType: 'arraybuffer' });
+            await instance.sock.sendMessage(jid, {
+                audio: Buffer.from(response.data),
                 caption: message || ''
             });
+        } else if (type === 'video') {
+            if (!videoUrl) {
+                return res.status(400).json({ error: 'Nenhum vídeo fornecido', instanceId: instanceId });
+            }
+            const response = await axios.get(videoUrl, { responseType: 'arraybuffer' });
+            await instance.sock.sendMessage(jid, {
+                video: Buffer.from(response.data),
+                caption: message || ''
+            });
+        } else {
+            return res.status(400).json({ error: 'Tipo de mensagem inválido', instanceId: instanceId });
         }
-        
+
         console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
         res.json({ success: true, instanceId: instanceId });
     } catch (error) {
