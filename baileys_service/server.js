@@ -419,27 +419,41 @@ app.post('/disconnect/:instanceId', (req, res) => {
 
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    const { to, message, type = 'text' } = req.body;
-    
+    const { to, message, type = 'text', mediaUrl, caption } = req.body;
+
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
         return res.status(400).json({ error: 'Instância não conectada', instanceId: instanceId });
     }
-    
+
     try {
         const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
-        
+
         if (type === 'text') {
             await instance.sock.sendMessage(jid, { text: message });
-        } else if (type === 'image' && req.body.imageData) {
-            // Handle image sending (base64)
-            const buffer = Buffer.from(req.body.imageData, 'base64');
-            await instance.sock.sendMessage(jid, { 
-                image: buffer,
-                caption: message || ''
-            });
+        } else if (mediaUrl) {
+            const content = {};
+            if (type === 'image') {
+                content.image = { url: mediaUrl };
+            } else if (type === 'video') {
+                content.video = { url: mediaUrl };
+            } else if (type === 'audio') {
+                content.audio = { url: mediaUrl };
+            } else if (type === 'document') {
+                content.document = { url: mediaUrl };
+            } else {
+                return res.status(400).json({ error: `Tipo de mídia não suportado: ${type}`, instanceId: instanceId });
+            }
+
+            if (caption) {
+                content.caption = caption;
+            }
+
+            await instance.sock.sendMessage(jid, content);
+        } else {
+            return res.status(400).json({ error: 'mediaUrl é necessário para enviar mídia', instanceId: instanceId });
         }
-        
+
         console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
         res.json({ success: true, instanceId: instanceId });
     } catch (error) {
