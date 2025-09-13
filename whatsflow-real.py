@@ -53,12 +53,11 @@ def guess_public_baileys_url() -> Optional[str]:
 
 
 DEFAULT_BAILEYS_URLS = [
-    guess_public_baileys_url(),
-    os.environ.get("API_BASE_URL"),
-    "http://78.46.250.112:3002",
-
     "http://127.0.0.1:3002",
     "http://localhost:3002",
+    os.environ.get("API_BASE_URL"),
+    guess_public_baileys_url(),
+    "http://78.46.250.112:3002",
 ]
 
 
