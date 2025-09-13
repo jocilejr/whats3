@@ -9797,35 +9797,11 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 return
             
             # Create scheduled message with robust database connection
-            max_retries = 3
-            conn = None
-            success = False
-            
-            for attempt in range(max_retries):
-                try:
-                    # Use same configuration as MessageScheduler
-                    conn = sqlite3.connect(DB_FILE, timeout=60)
-                    conn.execute('PRAGMA journal_mode=WAL')
-                    conn.execute('PRAGMA synchronous=NORMAL')
-                    conn.execute('PRAGMA cache_size=10000')
-                    conn.execute('PRAGMA temp_store=memory')
-                    cursor = conn.cursor()
-                    success = True
-                    break
-                except sqlite3.OperationalError as e:
-                    if "database is locked" in str(e) and attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 2  # Exponential backoff: 2s, 4s, 6s
-                        print(f"⚠️ Database bloqueado na criação, tentativa {attempt + 1}/{max_retries}. Aguardando {wait_time}s...")
-                        if conn:
-                            conn.close()
-                            conn = None
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        raise e
-            
-            if not success or not conn:
-                self.send_json_response({"error": "Erro de acesso ao banco de dados após múltiplas tentativas"}, 500)
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+            except Exception as e:
+                self.send_json_response({"error": f"Erro de acesso ao banco de dados: {str(e)}"}, 500)
                 return
             
             message_id = str(uuid.uuid4())
