@@ -1041,19 +1041,29 @@ class BaileysManager:
     def __init__(self):
         self.process = None
         self.is_running = False
-        
+
     def start_baileys(self):
         """Start Baileys service if available"""
-        try:
-            # Check if Baileys service is already running
-            import urllib.request
-            req = urllib.request.Request(f'{API_BASE_URL}/status')
-            with urllib.request.urlopen(req, timeout=2) as response:
-                print("✅ Baileys service já está rodando")
+        if check_service_health(API_BASE_URL):
+            return True
+        print("⚠️ Baileys service não encontrado - algumas funcionalidades podem não estar disponíveis")
+        return False
+
+def check_service_health(api_base_url: str) -> bool:
+    """Check if the Baileys service is reachable."""
+    url = f"{api_base_url}/health"
+    try:
+        import urllib.request
+        with urllib.request.urlopen(url, timeout=3) as response:
+            if response.status == 200:
+                print(f"✅ Baileys service disponível em {api_base_url}")
                 return True
-        except:
-            print("⚠️ Baileys service não encontrado - algumas funcionalidades podem não estar disponíveis")
-            return False
+            else:
+                print(f"⚠️ Baileys service respondeu com status {response.status} ({url})")
+                return False
+    except Exception as e:
+        print(f"❌ Não foi possível acessar Baileys em {url}: {e}")
+        return False
 
 def main():
     """Main function to start WhatsFlow Professional"""

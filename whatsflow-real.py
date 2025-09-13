@@ -38,12 +38,28 @@ except ImportError:
 # Configurações
 DB_FILE = "whatsflow.db"
 PORT = 8889
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://78.46.250.112:3002")
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://78.46.150.111:3002")
 WEBSOCKET_PORT = 8890
 
 # WebSocket clients management
 if WEBSOCKETS_AVAILABLE:
     websocket_clients: Set[websockets.WebSocketServerProtocol] = set()
+
+# Health check for Baileys service
+def check_service_health(api_base_url: str) -> bool:
+    """Check if the Baileys service is reachable."""
+    url = f"{api_base_url}/health"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            print(f"✅ Baileys service disponível em {api_base_url}")
+            return True
+        else:
+            print(f"⚠️ Baileys service respondeu com status {response.status_code} ({url})")
+            return False
+    except requests.RequestException as e:
+        print(f"❌ Não foi possível acessar Baileys em {url}: {e}")
+        return False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -7473,6 +7489,7 @@ app.listen(PORT, '0.0.0.0', () => {
                 time.sleep(3)
                 if self.process.poll() is None:
                     print("✅ Baileys iniciado com sucesso!")
+                    check_service_health(API_BASE_URL)
                     return True
                 else:
                     stdout, stderr = self.process.communicate()
@@ -7556,6 +7573,40 @@ class MessageScheduler:
             """, (now_brazil.isoformat(),))
             
             messages_to_send = cursor.fetchall()
+
+            # Verify Baileys service availability before sending
+            if messages_to_send and not check_service_health(self.api_base_url):
+                print("⚠️ Serviço Baileys indisponível - adiando envios")
+                retry_time = now_brazil + timedelta(minutes=5)
+                for row in messages_to_send:
+                    message_id = row[0]
+                    group_id = row[12]
+                    group_name = row[13]
+                    instance_id = row[14]
+
+                    # Log failure with shared cursor/connection
+                    self._log_message_sent(
+                        message_id,
+                        group_id,
+                        group_name,
+                        row[2],
+                        'failed',
+                        instance_id,
+                        'Baileys service unreachable',
+                        cursor=cursor,
+                    )
+
+                    cursor.execute(
+                        """
+                            UPDATE scheduled_messages
+                            SET next_run = ?
+                            WHERE id = ?
+                        """,
+                        (retry_time.isoformat(), message_id),
+                    )
+
+                conn.commit()
+                return
 
             for row in messages_to_send:
                 try:
