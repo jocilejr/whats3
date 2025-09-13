@@ -2873,7 +2873,7 @@ HTML_APP = '''<!DOCTYPE html>
             
             <div style="margin: 20px 0;">
                 <label style="display: block; margin-bottom: 5px; font-weight: 500;">Horário:</label>
-                <input type="time" id="scheduleTime" class="form-input" required>
+                <input type="time" id="scheduleTime" class="form-input" step="60" required>
             </div>
             
             <div id="scheduleDateDiv" style="margin: 20px 0;">
@@ -3004,7 +3004,7 @@ HTML_APP = '''<!DOCTYPE html>
             <div style="display: flex; gap: 15px; margin: 20px 0;">
                 <div style="flex: 1;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Horário (Brasília):</label>
-                    <input type="time" id="scheduleTimeInput" class="form-input" required>
+                    <input type="time" id="scheduleTimeInput" class="form-input" step="60" required>
                 </div>
                 <div id="scheduleDateDiv" style="flex: 1;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Data:</label>
@@ -5265,6 +5265,7 @@ HTML_APP = '''<!DOCTYPE html>
             const campaignId = document.getElementById('scheduleCampaignId').value;
             const messageText = document.getElementById('scheduleMessageText').value.trim();
             const scheduleType = document.getElementById('scheduleType').value;
+            // Get raw HH:MM string without altering it
             const scheduleTime = document.getElementById('scheduleTime').value;
             const scheduleDate = document.getElementById('scheduleDate').value;
             
@@ -9227,33 +9228,38 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
-            
+
             schedule_id = str(uuid.uuid4())
-            
+            schedule_time = data['schedule_time']
+            print(f"📥 Received schedule_time for campaign schedule: {schedule_time}")
+
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
-            
+
             # Calculate next_run based on schedule_type
             next_run = self.calculate_next_run(
-                data['schedule_type'], 
-                data['schedule_time'], 
-                data.get('schedule_days'), 
+                data['schedule_type'],
+                schedule_time,
+                data.get('schedule_days'),
                 data.get('schedule_date')
             )
-            
+
             cursor.execute("""
-                INSERT INTO scheduled_messages 
-                (id, campaign_id, message_text, schedule_type, schedule_time, schedule_days, 
+                INSERT INTO scheduled_messages
+                (id, campaign_id, message_text, schedule_type, schedule_time, schedule_days,
                  schedule_date, is_active, next_run, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (schedule_id, campaign_id, data['message_text'], data['schedule_type'],
-                  data['schedule_time'], json.dumps(data.get('schedule_days')),
+                  schedule_time, json.dumps(data.get('schedule_days')),
                   data.get('schedule_date'), data.get('is_active', True),
                   next_run, datetime.now(timezone.utc).isoformat()))
-            
+
             conn.commit()
+            cursor.execute("SELECT schedule_time FROM scheduled_messages WHERE id = ?", (schedule_id,))
+            stored_time = cursor.fetchone()[0]
+            print(f"💾 Stored schedule_time for campaign schedule {schedule_id}: {stored_time}")
             conn.close()
-            
+
             print(f"✅ Agendamento criado para campanha {campaign_id}")
             self.send_json_response({
                 'success': True, 
@@ -9487,7 +9493,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             instance_id = data.get('instance_id')
             schedule_type = data.get('schedule_type')
             schedule_time = data.get('schedule_time')
-            
+            print(f"📥 Received schedule_time: {schedule_time}")
+
             # Optional campaign field
             campaign_id = data.get('campaign_id', None)
             
@@ -9598,8 +9605,11 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             """, (message_id, group_id, group_name, instance_id))
             
             conn.commit()
+            cursor.execute("SELECT schedule_time FROM scheduled_messages WHERE id = ?", (message_id,))
+            stored_time = cursor.fetchone()[0]
+            print(f"💾 Stored schedule_time for message {message_id}: {stored_time}")
             conn.close()
-            
+
             self.send_json_response({
                 "success": True,
                 "message_id": message_id,
