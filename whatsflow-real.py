@@ -5213,13 +5213,18 @@ HTML_APP = '''<!DOCTYPE html>
             document.getElementById('scheduleCampaignId').value = campaignId;
             document.getElementById('scheduleModal').style.display = 'flex';
             
-            // Set default time to current time + 1 hour
-            const now = new Date();
-            now.setHours(now.getHours() + 1);
-            document.getElementById('scheduleTime').value = now.toTimeString().slice(0, 5);
-            
-            // Set default date to today
-            document.getElementById('scheduleDate').value = now.toISOString().slice(0, 10);
+            // Pre-fill current date/time only if fields are empty to avoid overwriting user selection
+            const timeInput = document.getElementById('scheduleTime');
+            const dateInput = document.getElementById('scheduleDate');
+            if (!timeInput.value || !dateInput.value) {
+                const now = new Date();
+                if (!timeInput.value) {
+                    timeInput.value = now.toTimeString().slice(0, 5);
+                }
+                if (!dateInput.value) {
+                    dateInput.value = now.toISOString().slice(0, 10);
+                }
+            }
             
             handleScheduleTypeChange();
         }
@@ -9254,14 +9259,18 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         try:
             from datetime import datetime, timedelta
             import time
-            
-            now = datetime.now()
+            import pytz
+
+            brazil_tz = pytz.timezone('America/Sao_Paulo')
+            now = datetime.now(brazil_tz)
             hour, minute = map(int, schedule_time.split(':'))
-            
+
             if schedule_type == 'once':
                 if schedule_date:
                     target_date = datetime.strptime(schedule_date, '%Y-%m-%d')
-                    target_datetime = target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    target_datetime = brazil_tz.localize(
+                        target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    )
                     if target_datetime > now:
                         return target_datetime.isoformat()
                 return None
