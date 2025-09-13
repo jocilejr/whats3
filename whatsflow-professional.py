@@ -35,6 +35,7 @@ DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
 
+ codex/corrigir-erro-de-conexao-com-baileys-wjafpj
 # Try to discover a reachable Baileys service. We attempt to detect the server's
 # public IP before falling back to environment or local addresses.
 
@@ -52,6 +53,7 @@ DEFAULT_BAILEYS_URLS = [
     guess_public_baileys_url(),
     os.environ.get("API_BASE_URL"),
     "http://78.46.250.112:3002",
+
     "http://127.0.0.1:3002",
     "http://localhost:3002",
 ]
