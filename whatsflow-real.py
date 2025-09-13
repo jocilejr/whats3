@@ -6852,23 +6852,23 @@ else:
 
 
 def add_sample_data():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT COUNT(*) FROM instances")
-    if cursor.fetchone()[0] > 0:
-        conn.close()
-        return
-    
-    current_time = datetime.now(timezone.utc).isoformat()
-    
-    # Sample instance
-    instance_id = str(uuid.uuid4())
-    cursor.execute("INSERT INTO instances (id, name, contacts_count, messages_today, created_at) VALUES (?, ?, ?, ?, ?)",
-                  (instance_id, "WhatsApp Principal", 0, 0, current_time))
-    
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(DB_FILE, timeout=30) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM instances")
+        if cursor.fetchone()[0] > 0:
+            return
+
+        current_time = datetime.now(timezone.utc).isoformat()
+
+        # Sample instance
+        instance_id = str(uuid.uuid4())
+        cursor.execute(
+            "INSERT INTO instances (id, name, contacts_count, messages_today, created_at) VALUES (?, ?, ?, ?, ?)",
+            (instance_id, "WhatsApp Principal", 0, 0, current_time),
+        )
+
+        conn.commit()
 
 # Baileys Service Manager
 class BaileysManager:
@@ -7638,10 +7638,10 @@ class MessageScheduler:
                         continue
                     
                     # Send message
-                    success = self._send_message_to_group(
+                    success, error_message = self._send_message_to_group(
                         instance_id, group_id, message_text, message_type, media_url
                     )
-                    
+
                     if success:
                         print(f"✅ Mensagem enviada para {group_name} via instância {instance_id}")
                         
@@ -7675,8 +7675,10 @@ class MessageScheduler:
                                 WHERE id = ?
                             """, (message_id,))
                     else:
-                        print(f"❌ Falha ao enviar mensagem para {group_name}")
-                        
+                        print(
+                            f"❌ Falha ao enviar mensagem para {group_name}: {error_message}"
+                        )
+
                         # Log failure using shared cursor/connection
                         self._log_message_sent(
                             message_id,
@@ -7685,7 +7687,7 @@ class MessageScheduler:
                             message_text,
                             'failed',
                             instance_id,
-                            'Erro na conexão com Baileys',
+                            error_message,
                             cursor=cursor,
                         )
                         
@@ -7715,6 +7717,12 @@ class MessageScheduler:
     def _send_message_to_group(self, instance_id, group_id, message_text, message_type, media_url):
         """Send message to group via Baileys API"""
         try:
+            # Ensure the Baileys service is available before attempting to send
+            if not check_service_health(self.api_base_url):
+                error_msg = f"Baileys service indisponível em {self.api_base_url}"
+                print(f"❌ {error_msg}")
+                return False, error_msg
+
             if message_type == 'text':
                 payload = {
                     'to': group_id,
@@ -7738,6 +7746,7 @@ class MessageScheduler:
                         timeout=(10, 120),
                     )
 
+update-timeout-settings-for-requests.post
                     if response.status_code != 200:
                         logger.error(
                             f"Baileys send failed ({response.status_code}): {response.text}"
@@ -7751,9 +7760,11 @@ class MessageScheduler:
                     logger.error("Baileys send timed out")
                     return False
 
+
         except Exception as e:
-            print(f"❌ Erro ao enviar via Baileys: {e}")
-            return False
+            error_msg = f"Erro ao enviar via Baileys: {e}"
+            print(f"❌ {error_msg}")
+            return False, error_msg
     
     def _calculate_next_weekly_run(self, schedule_time, schedule_days, brazil_tz):
         """Calculate next weekly run"""
@@ -8016,47 +8027,43 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
     
     def handle_get_instances(self):
         try:
-            conn = sqlite3.connect(DB_FILE)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM instances ORDER BY created_at DESC")
-            instances = [dict(row) for row in cursor.fetchall()]
-            conn.close()
+            with sqlite3.connect(DB_FILE, timeout=30) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM instances ORDER BY created_at DESC")
+                instances = [dict(row) for row in cursor.fetchall()]
             self.send_json_response(instances)
         except Exception as e:
             self.send_json_response({"error": str(e)}, 500)
-    
+
     def handle_get_stats(self):
         try:
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT COUNT(*) FROM contacts")
-            contacts_count = cursor.fetchone()[0]
-            
-            cursor.execute("SELECT COUNT(*) FROM messages")
-            messages_count = cursor.fetchone()[0]
-            
-            conn.close()
-            
+            with sqlite3.connect(DB_FILE, timeout=30) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute("SELECT COUNT(*) FROM contacts")
+                contacts_count = cursor.fetchone()[0]
+
+                cursor.execute("SELECT COUNT(*) FROM messages")
+                messages_count = cursor.fetchone()[0]
+
             stats = {
                 "contacts_count": contacts_count,
                 "conversations_count": contacts_count,
                 "messages_count": messages_count
             }
-            
+
             self.send_json_response(stats)
         except Exception as e:
             self.send_json_response({"error": str(e)}, 500)
-    
+
     def handle_get_messages(self):
         try:
-            conn = sqlite3.connect(DB_FILE)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM messages ORDER BY created_at DESC LIMIT 50")
-            messages = [dict(row) for row in cursor.fetchall()]
-            conn.close()
+            with sqlite3.connect(DB_FILE, timeout=30) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM messages ORDER BY created_at DESC LIMIT 50")
+                messages = [dict(row) for row in cursor.fetchall()]
             self.send_json_response(messages)
         except Exception as e:
             self.send_json_response({"error": str(e)}, 500)
