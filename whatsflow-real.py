@@ -7537,10 +7537,11 @@ class MessageScheduler:
     
     def _check_and_send_scheduled_messages(self):
         """Check for messages that need to be sent"""
+        conn = None
         try:
             brazil_tz = pytz.timezone('America/Sao_Paulo')
             now_brazil = datetime.now(brazil_tz)
-            
+
             conn = sqlite3.connect(DB_FILE, timeout=30)
             cursor = conn.cursor()
             
@@ -7555,7 +7556,7 @@ class MessageScheduler:
             """, (now_brazil.isoformat(),))
             
             messages_to_send = cursor.fetchall()
-            
+
             for row in messages_to_send:
                 try:
                     message_id = row[0]
@@ -7566,7 +7567,9 @@ class MessageScheduler:
                     schedule_time = row[6]
                     schedule_days = row[7]
                     schedule_date = row[8]
+ codex/update-variable-assignments-in-_check_and_send_scheduled_mes
                     # Extract group details from joined scheduled_message_groups table
+
                     group_id = row[12]
                     group_name = row[13]
                     instance_id = row[14]
@@ -7640,13 +7643,15 @@ class MessageScheduler:
                     continue
             
             conn.commit()
-            conn.close()
-            
+
             if messages_to_send:
                 print(f"📤 Processadas {len(messages_to_send)} mensagens agendadas")
-                
+
         except Exception as e:
             print(f"❌ Erro ao verificar mensagens agendadas: {e}")
+        finally:
+            if conn:
+                conn.close()
     
     def _send_message_to_group(self, instance_id, group_id, message_text, message_type, media_url):
         """Send message to group via Baileys API"""
@@ -9413,7 +9418,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT sm.*, 
+                SELECT sm.*,
                        COUNT(smg.group_id) as groups_count
                 FROM scheduled_messages sm
                 LEFT JOIN scheduled_message_groups smg ON sm.id = smg.message_id
@@ -9424,6 +9429,13 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             
             messages = []
             for row in cursor.fetchall():
+                # Map columns explicitly to maintain correct positions
+                schedule_date = row[8]
+                is_active = bool(row[9])
+                next_run = row[10]
+                created_at = row[11]
+                groups_count = int(row[12])
+
                 messages.append({
                     'id': row[0],
                     'campaign_id': row[1],
@@ -9433,11 +9445,11 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                     'schedule_type': row[5],
                     'schedule_time': row[6],
                     'schedule_days': row[7],
-                    'schedule_date': row[8],
-                    'is_active': bool(row[9]),
-                    'next_run': row[10],
-                    'created_at': row[11],
-                    'groups_count': row[12]
+                    'schedule_date': schedule_date,
+                    'is_active': is_active,
+                    'next_run': next_run,
+                    'created_at': created_at,
+                    'groups_count': groups_count
                 })
             
             conn.close()
@@ -9464,6 +9476,15 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             
             messages = []
             for row in cursor.fetchall():
+                # Map columns from SELECT sm.*, smg.group_id, smg.group_name, smg.instance_id
+                schedule_date = row[8]
+                is_active = bool(row[9])
+                next_run = row[10]
+                created_at = row[11]
+                group_id = row[12]
+                group_name = row[13]
+                instance_id = row[14]
+
                 messages.append({
                     'id': row[0],
                     'campaign_id': row[1],
@@ -9473,13 +9494,13 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                     'schedule_type': row[5],
                     'schedule_time': row[6],
                     'schedule_days': row[7],
-                    'schedule_date': row[8],
-                    'is_active': bool(row[9]),
-                    'next_run': row[10],
-                    'created_at': row[11],
-                    'group_id': row[12],
-                    'group_name': row[13],
-                    'instance_id': row[14]
+                    'schedule_date': schedule_date,
+                    'is_active': is_active,
+                    'next_run': next_run,
+                    'created_at': created_at,
+                    'group_id': group_id,
+                    'group_name': group_name,
+                    'instance_id': instance_id
                 })
             
             conn.close()
