@@ -7566,9 +7566,9 @@ class MessageScheduler:
                     schedule_time = row[6]
                     schedule_days = row[7]
                     schedule_date = row[8]
-                    group_id = row[12] if len(row) > 12 else None
-                    group_name = row[13] if len(row) > 13 else 'Grupo'
-                    instance_id = row[14] if len(row) > 14 else None
+                    group_id = row[12]
+                    group_name = row[13]
+                    instance_id = row[14]
                     
                     if not group_id or not instance_id:
                         print(f"⚠️ Mensagem {message_id} sem grupo ou instância definidos")
