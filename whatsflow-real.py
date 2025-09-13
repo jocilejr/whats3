@@ -107,7 +107,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # HTML da aplicação (mesmo do Pure, mas com conexão real)
-HTML_APP = '''<!DOCTYPE html>
+HTML_APP = r'''<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -6943,7 +6943,7 @@ class BaileysManager:
             print("✅ package.json criado")
             
             # Create Baileys server
-            baileys_server = '''const express = require('express');
+            baileys_server = r'''const express = require('express');
 const cors = require('cors');
 const { DisconnectReason, useMultiFileAuthState, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const makeWASocket = require('@whiskeysockets/baileys').default;
@@ -7775,8 +7775,6 @@ class MessageScheduler:
                         json=payload,
                         timeout=(10, 180),
                     )
-update-timeout-handling-in-_send_message_to_group
-
 
                     if response.status_code != 200:
                         logger.error(
