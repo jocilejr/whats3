@@ -6514,6 +6514,9 @@ HTML_APP = '''<!DOCTYPE html>
                                 <div style="font-size: 0.9rem; color: #666;">
                                     <strong>Grupos:</strong> ${message.groups_count} grupo(s)
                                 </div>
+                                <div style="font-size: 0.9rem; color: #666;">
+                                    <strong>Criado em:</strong> ${new Date(message.created_at).toLocaleString('pt-BR')}
+                                </div>
                                 
                                 <div style="display: flex; gap: 5px; margin-top: 10px;">
                                     <button onclick="toggleScheduledMessage('${message.id}', ${!message.is_active})" 
@@ -9449,7 +9452,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 is_active = bool(row[9])
                 next_run = row[10]
                 created_at = row[11]
-                groups_count = int(row[12])
+                groups_count = row[12]
 
                 messages.append({
                     'id': row[0],
