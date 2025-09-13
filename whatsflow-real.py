@@ -7730,18 +7730,26 @@ class MessageScheduler:
                 if message_text:
                     payload['caption'] = message_text
 
-            response = requests.post(
-                f"{self.api_base_url}/send/{instance_id}",
-                json=payload,
-                timeout=30
-            )
+            for attempt in range(3):
+                try:
+                    response = requests.post(
+                        f"{self.api_base_url}/send/{instance_id}",
+                        json=payload,
+                        timeout=(10, 120),
+                    )
 
-            if response.status_code != 200:
-                logger.error(
-                    f"Baileys send failed ({response.status_code}): {response.text}"
-                )
+                    if response.status_code != 200:
+                        logger.error(
+                            f"Baileys send failed ({response.status_code}): {response.text}"
+                        )
 
-            return response.status_code == 200
+                    return response.status_code == 200
+                except requests.exceptions.Timeout:
+                    if attempt < 2:
+                        time.sleep(2 ** attempt)
+                        continue
+                    logger.error("Baileys send timed out")
+                    return False
 
         except Exception as e:
             print(f"❌ Erro ao enviar via Baileys: {e}")
