@@ -44,8 +44,10 @@ WEBSOCKET_PORT = 8890
 # precedence, but we also try common fallbacks to avoid hard failures when the
 # configured host is unreachable.
 DEFAULT_BAILEYS_URLS = [
-    os.environ.get("API_BASE_URL"),
+ codex/corrigir-erro-de-conexao-com-baileys-nohzrw
     "http://78.46.250.112:3002",
+    os.environ.get("API_BASE_URL"),
+
     "http://127.0.0.1:3002",
     "http://localhost:3002",
 ]
