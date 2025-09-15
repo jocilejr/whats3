@@ -25,12 +25,37 @@ import warnings
 from typing import Set, Dict, Any, Optional, Tuple
 from datetime import timedelta
 import pytz
-import requests
 import io
 import importlib
 import cgi
 
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="cgi")
+
+requests = None
+
+
+def _ensure_requests_dependency():
+    global requests
+    if requests is not None:
+        return requests
+
+    try:
+        requests = importlib.import_module("requests")
+        return requests
+    except ModuleNotFoundError:
+        print("📦 Instalando dependência 'requests' (necessária para chamadas HTTP)...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+        except Exception as exc:
+            raise RuntimeError(
+                "Não foi possível instalar a biblioteca 'requests'. "
+                "Instale-a manualmente executando: pip install requests"
+            ) from exc
+        requests = importlib.import_module("requests")
+        return requests
+
+
+_ensure_requests_dependency()
 
 # Try to import websockets, fallback gracefully if not available
 try:
