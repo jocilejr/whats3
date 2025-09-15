@@ -6392,15 +6392,18 @@ HTML_APP = '''<!DOCTYPE html>
                     return;
                 }
 
-                container.innerHTML = groups.map(group => `
-                    <div class="group-item" onclick="toggleGroupSelection('${group.id}', '${group.name}', '${instanceId}')">
-                        <input type="checkbox" id="group-${group.id}" onchange="event.stopPropagation()">
+                container.innerHTML = groups.map(group => {
+                    const isSelected = selectedCampaignGroups.some(g => g.id === group.id);
+                    return `
+                    <div class="group-item ${isSelected ? 'selected' : ''}" onclick="toggleGroupSelection('${group.id}', '${group.name}', '${instanceId}')">
+                        <input type="checkbox" id="group-${group.id}" ${isSelected ? 'checked' : ''} onchange="event.stopPropagation()">
                         <div class="group-info">
                             <div class="group-name">${group.name}</div>
                             <div class="group-participants">${group.participants?.length || 0} participantes</div>
                         </div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
             } catch (error) {
                 console.error('❌ Erro ao carregar grupos:', error);
                 container.innerHTML = `<div class="empty-state"><p>Erro ao carregar grupos</p><p>${error.message}</p></div>`;
@@ -6493,8 +6496,12 @@ HTML_APP = '''<!DOCTYPE html>
         async function loadExistingCampaignGroups(campaignId) {
             try {
                 const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${campaignId}/groups`);
-                const groups = await response.json();
-                selectedCampaignGroups = groups;
+                const data = await response.json();
+                selectedCampaignGroups = data.map(g => ({
+                    id: g.group_id,
+                    name: g.group_name,
+                    instance_id: g.instance_id
+                }));
                 updateSelectedCampaignGroups();
             } catch (error) {
                 console.error('❌ Erro ao carregar grupos da campanha:', error);
