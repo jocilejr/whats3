@@ -118,6 +118,7 @@ HTML_APP = '''<!DOCTYPE html>
         
         :root {
             --primary: #128c7e;
+            --primary-color: var(--primary);
             --primary-dark: #075e54;
             --primary-light: #25d366;
             --bg-primary: #f0f2f5;
@@ -6529,6 +6530,7 @@ HTML_APP = '''<!DOCTYPE html>
             try {
                 const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${campaignId}/groups`);
                 const data = await response.json();
+transform-api-response-and-mark-selected-groups-z0tcv8
                 const groupsArray = Array.isArray(data) ? data : (Array.isArray(data?.groups) ? data.groups : []);
 
                 selectedCampaignGroups = groupsArray
@@ -6539,6 +6541,7 @@ HTML_APP = '''<!DOCTYPE html>
                     }))
                     .filter(group => !!group.id);
                 selectedCampaignInstanceId = selectedCampaignGroups[0]?.instance_id || '';
+
                 updateSelectedCampaignGroups();
                 applySelectedCampaignInstance({ triggerLoad: true });
             } catch (error) {
