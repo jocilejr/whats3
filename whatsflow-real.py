@@ -118,6 +118,7 @@ HTML_APP = '''<!DOCTYPE html>
         
         :root {
             --primary: #128c7e;
+            --primary-color: var(--primary);
             --primary-dark: #075e54;
             --primary-light: #25d366;
             --bg-primary: #f0f2f5;
@@ -6417,7 +6418,9 @@ HTML_APP = '''<!DOCTYPE html>
                 }
 
                 container.innerHTML = groups.map(group => {
+ transform-api-response-and-mark-selected-groups-z7bdpc
                     const isSelected = selectedCampaignGroups.some(g => g.group_id === group.id);
+
                     return `
                     <div class="group-item ${isSelected ? 'selected' : ''}" onclick="toggleGroupSelection('${group.id}', '${group.name}', '${instanceId}')">
                         <input type="checkbox" id="group-${group.id}" ${isSelected ? 'checked' : ''} onchange="event.stopPropagation()">
@@ -6524,11 +6527,13 @@ HTML_APP = '''<!DOCTYPE html>
                 const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${campaignId}/groups`);
                 const data = await response.json();
                 selectedCampaignGroups = data.map(g => ({
+ transform-api-response-and-mark-selected-groups-z7bdpc
                     group_id: g.group_id,
                     group_name: g.group_name,
                     instance_id: g.instance_id
                 }));
                 selectedCampaignInstanceId = selectedCampaignGroups[0]?.instance_id || '';
+
                 updateSelectedCampaignGroups();
                 applySelectedCampaignInstance({ triggerLoad: true });
             } catch (error) {
