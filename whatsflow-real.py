@@ -25,9 +25,6 @@ from typing import Set, Dict, Any, Optional
 from datetime import timedelta
 import pytz
 import requests
-import io
-import cgi
-from minio import Minio
 
 # Try to import websockets, fallback gracefully if not available
 try:
@@ -42,17 +39,6 @@ except ImportError:
 DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
-
-MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
-MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY")
-MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY")
-MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "meu-bucket")
-minio_client = Minio(
-    MINIO_ENDPOINT,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=False
-)
 
 # Candidate URLs for the Baileys service. We try to auto-discover the machine's
 # public IP so the script works even when the server address changes.
@@ -94,18 +80,6 @@ def resolve_baileys_url() -> str:
 
 
 API_BASE_URL = resolve_baileys_url()
-
-
-def ensure_minio_bucket():
-    if not minio_client.bucket_exists(MINIO_BUCKET):
-        minio_client.make_bucket(MINIO_BUCKET)
-
-
-def upload_to_minio(filename: str, data: bytes) -> str:
-    ensure_minio_bucket()
-    object_name = f"{int(time.time() * 1000)}{os.path.splitext(filename)[1]}"
-    minio_client.put_object(MINIO_BUCKET, object_name, io.BytesIO(data), len(data))
-    return f"http://{MINIO_ENDPOINT}/{MINIO_BUCKET}/{object_name}"
 
 # WebSocket clients management
 if WEBSOCKETS_AVAILABLE:
@@ -2694,20 +2668,9 @@ HTML_APP = '''<!DOCTYPE html>
                         </div>
                         
                         <div class="message-input-area" id="messageInputArea">
-                            <textarea class="message-input" id="messageInput"
-                                      placeholder="Digite sua mensagem..."
+                            <textarea class="message-input" id="messageInput" 
+                                      placeholder="Digite sua mensagem..." 
                                       onkeypress="handleMessageKeyPress(event)"></textarea>
-                            <input type="file" id="mediaFile" style="display:none" onchange="uploadMediaFile(this.files[0])">
-                            <input type="hidden" id="manualMediaUrl">
-                            <select id="manualMessageType" class="btn btn-secondary">
-                                <option value="image">Imagem</option>
-                                <option value="video">Vídeo</option>
-                                <option value="audio">Áudio</option>
-                                <option value="document">Documento</option>
-                            </select>
-                            <button class="btn btn-secondary" onclick="document.getElementById('mediaFile').click()" title="Selecionar mídia">
-                                📎
-                            </button>
                             <button class="btn btn-success" onclick="sendMessage()">
                                 📤 Enviar
                             </button>
@@ -4214,29 +4177,7 @@ HTML_APP = '''<!DOCTYPE html>
                 sendMessage();
             }
         }
-
-        async function uploadMediaFile(file) {
-            if (!file) return;
-            const formData = new FormData();
-            formData.append('file', file);
-            try {
-                const resp = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await resp.json();
-                if (data.url) {
-                    document.getElementById('manualMediaUrl').value = data.url;
-                    alert('✅ Arquivo enviado');
-                } else {
-                    alert('❌ Erro no upload');
-                }
-            } catch (err) {
-                console.error(err);
-                alert('❌ Erro no upload');
-            }
-        }
-
+        
         async function sendMessage() {
             if (!currentChat) {
                 alert('❌ Selecione uma conversa primeiro');
@@ -8104,8 +8045,6 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_whatsapp_disconnected()
         elif self.path == '/api/chats/import':
             self.handle_import_chats()
-        elif self.path == '/api/upload':
-            self.handle_upload_media()
         elif self.path.startswith('/api/whatsapp/connect/'):
             instance_id = self.path.split('/')[-1]
             self.handle_connect_instance(instance_id)
@@ -8391,24 +8330,6 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Erro ao processar desconexão: {e}")
             self.send_json_response({"error": str(e)}, 500)
-
-    def handle_upload_media(self):
-        try:
-            form = cgi.FieldStorage(
-                fp=self.rfile,
-                headers=self.headers,
-                environ={
-                    'REQUEST_METHOD': 'POST',
-                    'CONTENT_TYPE': self.headers['Content-Type'],
-                },
-            )
-            file_item = form['file']
-            data = file_item.file.read()
-            url = upload_to_minio(file_item.filename, data)
-            self.send_json_response({'url': url})
-        except Exception as e:
-            logger.exception("Erro no upload de mídia")
-            self.send_json_response({'error': str(e)}, 500)
 
     def handle_import_chats(self):
         try:
