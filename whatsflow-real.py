@@ -21,10 +21,16 @@ import signal
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
 import logging
-from typing import Set, Dict, Any, Optional
+import warnings
+from typing import Set, Dict, Any, Optional, Tuple
 from datetime import timedelta
 import pytz
 import requests
+import io
+import importlib
+import cgi
+
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="cgi")
 
 # Try to import websockets, fallback gracefully if not available
 try:
@@ -39,6 +45,82 @@ except ImportError:
 DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
+
+MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
+MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4")
+MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "meu-bucket")
+MINIO_PUBLIC_URL = os.environ.get("MINIO_PUBLIC_URL")
+_MINIO_CLIENT = None
+Minio = None
+
+
+def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
+    if not endpoint:
+        return "localhost:9000", False
+    secure = False
+    cleaned = endpoint
+    if "://" in endpoint:
+        parsed = urllib.parse.urlparse(endpoint)
+        secure = parsed.scheme.lower() == "https"
+        cleaned = parsed.netloc or parsed.path
+    return cleaned or "localhost:9000", secure
+
+
+_MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT = _parse_minio_endpoint(MINIO_ENDPOINT_RAW)
+_ENV_MINIO_SECURE = os.environ.get("MINIO_SECURE")
+if _ENV_MINIO_SECURE is not None:
+    _MINIO_SECURE_DEFAULT = _ENV_MINIO_SECURE.lower() in {"1", "true", "yes", "on"}
+
+
+def _get_minio_public_base() -> str:
+    if MINIO_PUBLIC_URL:
+        return MINIO_PUBLIC_URL.rstrip("/")
+    if "://" in MINIO_ENDPOINT_RAW:
+        return MINIO_ENDPOINT_RAW.rstrip("/")
+    scheme = "https" if _MINIO_SECURE_DEFAULT else "http"
+    return f"{scheme}://{_MINIO_ENDPOINT}"
+
+
+def _ensure_minio_dependency():
+    global Minio
+    if Minio is not None:
+        return Minio
+
+    try:
+        Minio = importlib.import_module("minio").Minio
+        return Minio
+    except ModuleNotFoundError:
+        print("📦 Instalando dependência 'minio' (necessária para uploads)...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "minio"])
+        except Exception as exc:
+            raise RuntimeError(
+                "Não foi possível instalar a biblioteca 'minio'. "
+                "Instale-a manualmente executando: pip install minio"
+            ) from exc
+        Minio = importlib.import_module("minio").Minio
+        return Minio
+
+
+def get_minio_client():
+    global _MINIO_CLIENT
+    if _MINIO_CLIENT is not None:
+        return _MINIO_CLIENT
+
+    minio_cls = _ensure_minio_dependency()
+    if not MINIO_ACCESS_KEY or not MINIO_SECRET_KEY:
+        raise RuntimeError(
+            "Credenciais do MinIO não configuradas. Defina MINIO_ACCESS_KEY e MINIO_SECRET_KEY."
+        )
+
+    _MINIO_CLIENT = minio_cls(
+        _MINIO_ENDPOINT,
+        access_key=MINIO_ACCESS_KEY,
+        secret_key=MINIO_SECRET_KEY,
+        secure=_MINIO_SECURE_DEFAULT,
+    )
+    return _MINIO_CLIENT
 
 # Candidate URLs for the Baileys service. We try to auto-discover the machine's
 # public IP so the script works even when the server address changes.
@@ -80,6 +162,30 @@ def resolve_baileys_url() -> str:
 
 
 API_BASE_URL = resolve_baileys_url()
+
+
+def ensure_minio_bucket(client=None):
+    client = client or get_minio_client()
+    try:
+        if not client.bucket_exists(MINIO_BUCKET):
+            client.make_bucket(MINIO_BUCKET)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Não foi possível preparar o bucket '{MINIO_BUCKET}' no MinIO: {exc}"
+        ) from exc
+    return client
+
+
+def upload_to_minio(filename: str, data: bytes) -> str:
+    client = ensure_minio_bucket()
+    name = filename or "arquivo"
+    object_name = f"{int(time.time() * 1000)}{os.path.splitext(name)[1]}"
+    data_stream = io.BytesIO(data)
+    try:
+        client.put_object(MINIO_BUCKET, object_name, data_stream, len(data))
+    except Exception as exc:
+        raise RuntimeError(f"Falha ao enviar arquivo para o MinIO: {exc}") from exc
+    return f"{_get_minio_public_base()}/{MINIO_BUCKET}/{object_name}"
 
 # WebSocket clients management
 if WEBSOCKETS_AVAILABLE:
@@ -2668,9 +2774,20 @@ HTML_APP = '''<!DOCTYPE html>
                         </div>
                         
                         <div class="message-input-area" id="messageInputArea">
-                            <textarea class="message-input" id="messageInput" 
-                                      placeholder="Digite sua mensagem..." 
+                            <textarea class="message-input" id="messageInput"
+                                      placeholder="Digite sua mensagem..."
                                       onkeypress="handleMessageKeyPress(event)"></textarea>
+                            <input type="file" id="mediaFile" style="display:none" onchange="uploadMediaFile(this.files[0])">
+                            <input type="hidden" id="manualMediaUrl">
+                            <select id="manualMessageType" class="btn btn-secondary">
+                                <option value="image">Imagem</option>
+                                <option value="video">Vídeo</option>
+                                <option value="audio">Áudio</option>
+                                <option value="document">Documento</option>
+                            </select>
+                            <button class="btn btn-secondary" onclick="document.getElementById('mediaFile').click()" title="Selecionar mídia">
+                                📎
+                            </button>
                             <button class="btn btn-success" onclick="sendMessage()">
                                 📤 Enviar
                             </button>
@@ -3036,9 +3153,22 @@ HTML_APP = '''<!DOCTYPE html>
             
             <div id="mediaMessageDiv" style="margin: 20px 0; display: none;">
                 <label style="display: block; margin-bottom: 5px; font-weight: 500;">URL da Mídia:</label>
-                <input type="url" id="scheduleMediaUrl" class="form-input" 
-                       placeholder="https://exemplo.com/arquivo.jpg" 
+                <input type="url" id="scheduleMediaUrl" class="form-input"
+                       placeholder="https://exemplo.com/arquivo.jpg"
                        onchange="previewMedia()">
+                <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                    <input type="file" id="scheduleMediaFile" style="display:none"
+                           accept="image/*,video/*,audio/*"
+                           onchange="uploadMediaFile(this.files[0], 'scheduleMediaUrl', 'scheduleMediaUploadStatus')">
+                    <button type="button" class="btn btn-secondary"
+                            onclick="document.getElementById('scheduleMediaFile').click()">
+                        📁 Upload de Arquivo
+                    </button>
+                    <span style="font-size: 0.85rem; color: #64748b;">
+                        O link será preenchido automaticamente após o envio.
+                    </span>
+                </div>
+                <p id="scheduleMediaUploadStatus" style="margin-top: 6px; font-size: 0.85rem; color: #64748b;"></p>
                 <div id="mediaPreview" style="margin-top: 15px; display: none;">
                     <!-- Media preview will appear here -->
                 </div>
@@ -4115,7 +4245,7 @@ HTML_APP = '''<!DOCTYPE html>
         
         function getContactDisplayName(name, phone) {
             // Se o nome é um número de telefone ou está vazio, usar o número formatado
-            if (!name || name === phone || /^\+?\d+$/.test(name)) {
+            if (!name || name === phone || /^[+]?[0-9]+$/.test(name)) {
                 return formatPhoneNumber(phone);
             }
             return name;
@@ -4123,7 +4253,7 @@ HTML_APP = '''<!DOCTYPE html>
         
         function formatPhoneNumber(phone) {
             // Formatar número do telefone para exibição
-            const cleaned = phone.replace(/\D/g, '');
+            const cleaned = phone.replace(/[^0-9]/g, '');
             if (cleaned.length === 13 && cleaned.startsWith('55')) {
                 return `+55 (${cleaned.substr(2, 2)}) ${cleaned.substr(4, 5)}-${cleaned.substr(9)}`;
             } else if (cleaned.length === 11) {
@@ -4133,11 +4263,11 @@ HTML_APP = '''<!DOCTYPE html>
         }
         
         function getContactInitial(name, phone) {
-            if (name && name !== phone && !/^\+?\d+$/.test(name)) {
+            if (name && name !== phone && !/^[+]?[0-9]+$/.test(name)) {
                 return name.charAt(0).toUpperCase();
             }
             // Se é número de telefone, usar o último dígito
-            const digits = phone.replace(/\D/g, '');
+            const digits = phone.replace(/[^0-9]/g, '');
             return digits.slice(-1);
         }
         
@@ -4177,7 +4307,70 @@ HTML_APP = '''<!DOCTYPE html>
                 sendMessage();
             }
         }
-        
+
+        async function uploadMediaFile(file, targetFieldId = 'manualMediaUrl', statusElementId = null) {
+            if (!file) return;
+
+            const statusElement = statusElementId ? document.getElementById(statusElementId) : null;
+            if (statusElement) {
+                statusElement.style.color = '#0369a1';
+                statusElement.textContent = `Enviando "${file.name}"...`;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const resp = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                let data;
+                try {
+                    data = await resp.json();
+                } catch (jsonError) {
+                    throw new Error('Resposta inválida do servidor');
+                }
+
+                if (!resp.ok || !data.url) {
+                    const message = data && data.error ? data.error : 'Erro no upload';
+                    throw new Error(message);
+                }
+
+                const targetInput = document.getElementById(targetFieldId);
+                if (targetInput) {
+                    targetInput.value = data.url;
+                    targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+
+                if (statusElement) {
+                    statusElement.style.color = '#16a34a';
+                    statusElement.textContent = `✅ ${file.name} enviado com sucesso!`;
+                } else {
+                    alert('✅ Arquivo enviado');
+                }
+
+                if (targetFieldId === 'manualMediaUrl') {
+                    const manualFileInput = document.getElementById('mediaFile');
+                    if (manualFileInput) manualFileInput.value = '';
+                } else if (targetFieldId === 'scheduleMediaUrl') {
+                    const scheduleFileInput = document.getElementById('scheduleMediaFile');
+                    if (scheduleFileInput) scheduleFileInput.value = '';
+                    previewMedia();
+                }
+            } catch (err) {
+                console.error(err);
+                const errorMessage = err && err.message ? err.message : 'Erro no upload';
+                if (statusElement) {
+                    statusElement.style.color = '#dc2626';
+                    statusElement.textContent = `❌ Erro ao enviar ${file.name ? `"${file.name}"` : 'arquivo'}: ${errorMessage}`;
+                } else {
+                    alert(`❌ Erro no upload: ${errorMessage}`);
+                }
+            }
+        }
+
         async function sendMessage() {
             if (!currentChat) {
                 alert('❌ Selecione uma conversa primeiro');
@@ -5735,11 +5928,17 @@ HTML_APP = '''<!DOCTYPE html>
             const textDiv = document.getElementById('textMessageDiv');
             const mediaDiv = document.getElementById('mediaMessageDiv');
             const mediaPreview = document.getElementById('mediaPreview');
-            
+            const uploadStatus = document.getElementById('scheduleMediaUploadStatus');
+
             if (messageType === 'text') {
                 textDiv.style.display = 'block';
                 mediaDiv.style.display = 'none';
                 mediaPreview.style.display = 'none';
+                mediaPreview.innerHTML = '';
+                if (uploadStatus) {
+                    uploadStatus.textContent = '';
+                    uploadStatus.style.color = '#64748b';
+                }
             } else {
                 textDiv.style.display = 'none';
                 mediaDiv.style.display = 'block';
@@ -5816,10 +6015,24 @@ HTML_APP = '''<!DOCTYPE html>
             document.getElementById('scheduleMessageContent').value = '';
             document.getElementById('scheduleMediaUrl').value = '';
             document.getElementById('scheduleMediaCaption').value = '';
+            const uploadStatus = document.getElementById('scheduleMediaUploadStatus');
+            if (uploadStatus) {
+                uploadStatus.textContent = '';
+                uploadStatus.style.color = '#64748b';
+            }
+            const scheduleFileInput = document.getElementById('scheduleMediaFile');
+            if (scheduleFileInput) {
+                scheduleFileInput.value = '';
+            }
+            const mediaPreview = document.getElementById('mediaPreview');
+            if (mediaPreview) {
+                mediaPreview.innerHTML = '';
+                mediaPreview.style.display = 'none';
+            }
             document.getElementById('scheduleTypeSelect').value = 'once';
             document.getElementById('scheduleTimeInput').value = '';
             document.getElementById('groupScheduleDateInput').value = '';
-            
+
             // Uncheck all weekday checkboxes
             const checkboxes = document.querySelectorAll('input[name="scheduleWeekDays"]');
             checkboxes.forEach(cb => cb.checked = false);
@@ -8045,6 +8258,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_whatsapp_disconnected()
         elif self.path == '/api/chats/import':
             self.handle_import_chats()
+        elif self.path == '/api/upload':
+            self.handle_upload_media()
         elif self.path.startswith('/api/whatsapp/connect/'):
             instance_id = self.path.split('/')[-1]
             self.handle_connect_instance(instance_id)
@@ -8330,6 +8545,24 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Erro ao processar desconexão: {e}")
             self.send_json_response({"error": str(e)}, 500)
+
+    def handle_upload_media(self):
+        try:
+            form = cgi.FieldStorage(
+                fp=self.rfile,
+                headers=self.headers,
+                environ={
+                    'REQUEST_METHOD': 'POST',
+                    'CONTENT_TYPE': self.headers['Content-Type'],
+                },
+            )
+            file_item = form['file']
+            data = file_item.file.read()
+            url = upload_to_minio(file_item.filename, data)
+            self.send_json_response({'url': url})
+        except Exception as e:
+            logger.exception("Erro no upload de mídia")
+            self.send_json_response({'error': str(e)}, 500)
 
     def handle_import_chats(self):
         try:
