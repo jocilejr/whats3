@@ -5847,8 +5847,8 @@ HTML_APP = '''<!DOCTYPE html>
                 if (campaignId) {
                     // Use campaign groups
                     groupsToUse = selectedCampaignGroups.map(group => ({
-                        group_id: group.id,
-                        group_name: group.name,
+                        group_id: group.group_id,
+                        group_name: group.group_name,
                         instance_id: group.instance_id
                     }));
                 } else {
@@ -6147,6 +6147,7 @@ HTML_APP = '''<!DOCTYPE html>
         // Campaign Management Functions
         let currentCampaignId = null;
         let selectedCampaignGroups = [];
+        let selectedCampaignInstanceId = '';
         const WHATSFLOW_API_URL = window.WHATSFLOW_API_URL || window.location.origin;
         
         // Show create campaign modal
@@ -6305,6 +6306,7 @@ HTML_APP = '''<!DOCTYPE html>
         // Manage campaign
         function manageCampaign(campaignId, campaignName) {
             currentCampaignId = campaignId;
+            selectedCampaignInstanceId = '';
             document.getElementById('manageCampaignTitle').textContent = `🎯 ${campaignName}`;
             document.getElementById('manageCampaignModal').style.display = 'flex';
             
@@ -6323,6 +6325,7 @@ HTML_APP = '''<!DOCTYPE html>
             document.getElementById('manageCampaignModal').style.display = 'none';
             currentCampaignId = null;
             selectedCampaignGroups = [];
+            selectedCampaignInstanceId = '';
         }
         
         // Show campaign tab
@@ -6360,16 +6363,38 @@ HTML_APP = '''<!DOCTYPE html>
                     instances.map(instance => `
                         <option value="${instance.id}">${instance.name} ${instance.connected ? '(Conectado)' : '(Desconectado)'}</option>
                     `).join('');
+
+                applySelectedCampaignInstance();
             } catch (error) {
                 select.innerHTML = '<option value="">Erro ao carregar instâncias</option>';
             }
         }
-        
+
+        function applySelectedCampaignInstance(options = {}) {
+            const { triggerLoad = false } = options;
+            if (!selectedCampaignInstanceId) return;
+
+            const select = document.getElementById('campaignGroupsInstance');
+            if (!select) return;
+
+            const optionExists = Array.from(select.options || []).some(option => option.value === selectedCampaignInstanceId);
+            if (!optionExists) return;
+
+            const previousValue = select.value;
+            select.value = selectedCampaignInstanceId;
+
+            if (triggerLoad || previousValue !== selectedCampaignInstanceId) {
+                loadCampaignGroups();
+            }
+        }
+
         // Load campaign groups from selected instance
         async function loadCampaignGroups() {
             const instanceId = document.getElementById('campaignGroupsInstance').value;
             const container = document.getElementById('availableCampaignGroups');
-            
+
+            selectedCampaignInstanceId = instanceId || '';
+
             if (!instanceId) {
                 container.innerHTML = '<div class="empty-state"><p>Selecione uma instância para carregar grupos</p></div>';
                 return;
@@ -6391,15 +6416,18 @@ HTML_APP = '''<!DOCTYPE html>
                     return;
                 }
 
-                container.innerHTML = groups.map(group => `
-                    <div class="group-item" onclick="toggleGroupSelection('${group.id}', '${group.name}', '${instanceId}')">
-                        <input type="checkbox" id="group-${group.id}" onchange="event.stopPropagation()">
+                container.innerHTML = groups.map(group => {
+                    const isSelected = selectedCampaignGroups.some(g => g.group_id === group.id);
+                    return `
+                    <div class="group-item ${isSelected ? 'selected' : ''}" onclick="toggleGroupSelection('${group.id}', '${group.name}', '${instanceId}')">
+                        <input type="checkbox" id="group-${group.id}" ${isSelected ? 'checked' : ''} onchange="event.stopPropagation()">
                         <div class="group-info">
                             <div class="group-name">${group.name}</div>
                             <div class="group-participants">${group.participants?.length || 0} participantes</div>
                         </div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
             } catch (error) {
                 console.error('❌ Erro ao carregar grupos:', error);
                 container.innerHTML = `<div class="empty-state"><p>Erro ao carregar grupos</p><p>${error.message}</p></div>`;
@@ -6415,14 +6443,16 @@ HTML_APP = '''<!DOCTYPE html>
             
             if (checkbox.checked) {
                 groupItem.classList.add('selected');
-                selectedCampaignGroups.push({
-                    id: groupId,
-                    name: groupName,
-                    instance_id: instanceId
-                });
+                if (!selectedCampaignGroups.some(g => g.group_id === groupId)) {
+                    selectedCampaignGroups.push({
+                        group_id: groupId,
+                        group_name: groupName,
+                        instance_id: instanceId
+                    });
+                }
             } else {
                 groupItem.classList.remove('selected');
-                selectedCampaignGroups = selectedCampaignGroups.filter(g => g.id !== groupId);
+                selectedCampaignGroups = selectedCampaignGroups.filter(g => g.group_id !== groupId);
             }
             
             // Update selected groups display
@@ -6444,10 +6474,10 @@ HTML_APP = '''<!DOCTYPE html>
             container.innerHTML = selectedCampaignGroups.map(group => `
                 <div class="group-item selected">
                     <div class="group-info">
-                        <div class="group-name">${group.name}</div>
+                        <div class="group-name">${group.group_name}</div>
                         <div class="group-participants">Instância: ${group.instance_id}</div>
                     </div>
-                    <button onclick="removeGroupFromCampaign('${group.id}')" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 5px;">
+                    <button onclick="removeGroupFromCampaign('${group.group_id}')" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 5px;">
                         ✕
                     </button>
                 </div>
@@ -6456,9 +6486,9 @@ HTML_APP = '''<!DOCTYPE html>
         
         // Remove group from campaign
         function removeGroupFromCampaign(groupId) {
-            selectedCampaignGroups = selectedCampaignGroups.filter(g => g.id !== groupId);
+            selectedCampaignGroups = selectedCampaignGroups.filter(g => g.group_id !== groupId);
             updateSelectedCampaignGroups();
-            
+
             // Uncheck in available groups if visible
             const checkbox = document.getElementById(`group-${groupId}`);
             if (checkbox) {
@@ -6492,9 +6522,15 @@ HTML_APP = '''<!DOCTYPE html>
         async function loadExistingCampaignGroups(campaignId) {
             try {
                 const response = await fetch(`${WHATSFLOW_API_URL}/api/campaigns/${campaignId}/groups`);
-                const groups = await response.json();
-                selectedCampaignGroups = groups;
+                const data = await response.json();
+                selectedCampaignGroups = data.map(g => ({
+                    group_id: g.group_id,
+                    group_name: g.group_name,
+                    instance_id: g.instance_id
+                }));
+                selectedCampaignInstanceId = selectedCampaignGroups[0]?.instance_id || '';
                 updateSelectedCampaignGroups();
+                applySelectedCampaignInstance({ triggerLoad: true });
             } catch (error) {
                 console.error('❌ Erro ao carregar grupos da campanha:', error);
             }
