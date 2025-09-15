@@ -118,6 +118,7 @@ HTML_APP = '''<!DOCTYPE html>
         
         :root {
             --primary: #128c7e;
+            --primary-color: var(--primary);
             --primary-dark: #075e54;
             --primary-light: #25d366;
             --bg-primary: #f0f2f5;
