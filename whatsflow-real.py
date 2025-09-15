@@ -3051,7 +3051,7 @@ HTML_APP = '''<!DOCTYPE html>
             
             <div style="margin: 20px 0;">
                 <label style="display: block; margin-bottom: 5px; font-weight: 500;">Tipo de Agendamento:</label>
-                <select id="scheduleTypeSelect" class="form-input" onchange="handleScheduleTypeChange()">
+                <select id="scheduleTypeSelect" class="form-input" onchange="handleGroupScheduleTypeChange()">
                     <option value="once">📅 Envio Único</option>
                     <option value="weekly">📅 Semanal (Recorrente)</option>
                 </select>
@@ -3062,13 +3062,13 @@ HTML_APP = '''<!DOCTYPE html>
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Horário (Brasília):</label>
                     <input type="time" id="scheduleTimeInput" class="form-input" step="60" required>
                 </div>
-                <div id="scheduleDateDiv" style="flex: 1;">
+                <div id="groupScheduleDateDiv" style="flex: 1;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Data:</label>
-                    <input type="date" id="scheduleDateInput" class="form-input" required>
+                    <input type="date" id="groupScheduleDateInput" class="form-input" required>
                 </div>
             </div>
-            
-            <div id="scheduleDaysDiv" style="margin: 20px 0; display: none;">
+
+            <div id="groupScheduleDaysDiv" style="margin: 20px 0; display: none;">
                 <label style="display: block; margin-bottom: 10px; font-weight: 500;">Dias da Semana:</label>
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
                     <label style="display: flex; align-items: center; gap: 8px;">
@@ -5746,11 +5746,11 @@ HTML_APP = '''<!DOCTYPE html>
         }
         
         // Handle schedule type change
-        function handleScheduleTypeChange() {
+        function handleGroupScheduleTypeChange() {
             const scheduleType = document.getElementById('scheduleTypeSelect').value;
-            const dateDiv = document.getElementById('scheduleDateDiv');
-            const daysDiv = document.getElementById('scheduleDaysDiv');
-            
+            const dateDiv = document.getElementById('groupScheduleDateDiv');
+            const daysDiv = document.getElementById('groupScheduleDaysDiv');
+
             if (scheduleType === 'once') {
                 dateDiv.style.display = 'block';
                 daysDiv.style.display = 'none';
@@ -5817,7 +5817,7 @@ HTML_APP = '''<!DOCTYPE html>
             document.getElementById('scheduleMediaCaption').value = '';
             document.getElementById('scheduleTypeSelect').value = 'once';
             document.getElementById('scheduleTimeInput').value = '';
-            document.getElementById('scheduleDateInput').value = '';
+            document.getElementById('groupScheduleDateInput').value = '';
             
             // Uncheck all weekday checkboxes
             const checkboxes = document.querySelectorAll('input[name="scheduleWeekDays"]');
@@ -5825,7 +5825,7 @@ HTML_APP = '''<!DOCTYPE html>
             
             // Reset displays
             handleMessageTypeChange();
-            handleScheduleTypeChange();
+            handleGroupScheduleTypeChange();
             
             // Clear group selections
             selectedScheduleGroups = [];
@@ -5834,7 +5834,7 @@ HTML_APP = '''<!DOCTYPE html>
             // Set default date to tomorrow
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
-            document.getElementById('scheduleDateInput').value = tomorrow.toISOString().split('T')[0];
+            document.getElementById('groupScheduleDateInput').value = tomorrow.toISOString().split('T')[0];
         }
         
         // Create scheduled message
@@ -5893,7 +5893,7 @@ HTML_APP = '''<!DOCTYPE html>
                 let scheduleDays = [];
                 
                 if (scheduleType === 'once') {
-                    scheduleDate = document.getElementById('scheduleDateInput').value;
+                    scheduleDate = document.getElementById('groupScheduleDateInput').value;
                     if (!scheduleDate) {
                         alert('❌ Selecione uma data');
                         return;
