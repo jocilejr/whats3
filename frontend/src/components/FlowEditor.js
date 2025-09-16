@@ -24,6 +24,7 @@ const MessageNode = ({ data, isConnectable }) => {
         isConnectable={isConnectable}
       />
       <div className="node-header">
+        <span className="node-icon">💬</span>
         <span className="node-title">Mensagem</span>
       </div>
       <div className="node-content">
@@ -34,7 +35,7 @@ const MessageNode = ({ data, isConnectable }) => {
           className="message-input"
         />
         <div className="delay-section">
-          <label>Delay (segundos):</label>
+          <label>⏱️ Delay (segundos):</label>
           <input
             type="number"
             min="0"
@@ -66,6 +67,7 @@ const ConditionNode = ({ data, isConnectable }) => {
         isConnectable={isConnectable}
       />
       <div className="node-header">
+        <span className="node-icon">🔀</span>
         <span className="node-title">Condição</span>
       </div>
       <div className="node-content">
@@ -114,8 +116,8 @@ const ConditionNode = ({ data, isConnectable }) => {
         isConnectable={isConnectable}
       />
       <div className="condition-labels">
-        <span className="yes-label">Sim</span>
-        <span className="no-label">Não</span>
+        <span className="yes-label">✅ SIM</span>
+        <span className="no-label">❌ NÃO</span>
       </div>
     </div>
   );
@@ -131,6 +133,7 @@ const TagNode = ({ data, isConnectable }) => {
         isConnectable={isConnectable}
       />
       <div className="node-header">
+        <span className="node-icon">🏷️</span>
         <span className="node-title">Etiqueta</span>
       </div>
       <div className="node-content">
@@ -146,8 +149,8 @@ const TagNode = ({ data, isConnectable }) => {
           onChange={(e) => data.onActionChange?.(e.target.value)}
           className="tag-action"
         >
-          <option value="add">Adicionar</option>
-          <option value="remove">Remover</option>
+          <option value="add">➕ Adicionar</option>
+          <option value="remove">➖ Remover</option>
         </select>
       </div>
       <Handle
@@ -170,17 +173,18 @@ const MediaNode = ({ data, isConnectable }) => {
         isConnectable={isConnectable}
       />
       <div className="node-header">
+        <span className="node-icon">📁</span>
         <span className="node-title">Mídia</span>
       </div>
       <div className="node-content">
-        <select
+        <select 
           value={data.mediaType || 'audio'}
           onChange={(e) => data.onTypeChange?.(e.target.value)}
           className="media-type"
         >
-          <option value="audio">Áudio</option>
-          <option value="image">Imagem</option>
-          <option value="video">Vídeo</option>
+          <option value="audio">🎵 Áudio</option>
+          <option value="image">🖼️ Imagem</option>
+          <option value="video">🎥 Vídeo</option>
         </select>
         <input
           type="file"
@@ -189,7 +193,7 @@ const MediaNode = ({ data, isConnectable }) => {
           className="media-file"
         />
         <div className="delay-section">
-          <label>Delay (segundos):</label>
+          <label>⏱️ Delay (segundos):</label>
           <input
             type="number"
             min="0"
@@ -215,6 +219,7 @@ const StartNode = ({ data, isConnectable }) => {
   return (
     <div className="flow-node start-node">
       <div className="node-header">
+        <span className="node-icon">🚀</span>
         <span className="node-title">Início</span>
       </div>
       <div className="node-content">
@@ -240,6 +245,7 @@ const DelayNode = ({ data, isConnectable }) => {
         isConnectable={isConnectable}
       />
       <div className="node-header">
+        <span className="node-icon">⏱️</span>
         <span className="node-title">Delay</span>
       </div>
       <div className="node-content">
@@ -384,10 +390,10 @@ export default function FlowEditor({ flowId, onSave, onClose }) {
         </div>
         <div className="flow-actions">
           <button onClick={handleSave} className="save-button">
-            Salvar
+            💾 Salvar
           </button>
           <button onClick={onClose} className="close-button">
-            Fechar
+            ❌ Fechar
           </button>
         </div>
       </div>
@@ -400,30 +406,35 @@ export default function FlowEditor({ flowId, onSave, onClose }) {
               onClick={() => addNode('delayNode')}
               className="palette-item"
             >
+              <span className="palette-icon">⏱️</span>
               <span>Delay</span>
             </button>
             <button
               onClick={() => addNode('messageNode')}
               className="palette-item"
             >
+              <span className="palette-icon">💬</span>
               <span>Mensagem</span>
             </button>
             <button
               onClick={() => addNode('conditionNode')}
               className="palette-item"
             >
+              <span className="palette-icon">🔀</span>
               <span>Condição</span>
             </button>
             <button
               onClick={() => addNode('tagNode')}
               className="palette-item"
             >
+              <span className="palette-icon">🏷️</span>
               <span>Etiqueta</span>
             </button>
             <button
               onClick={() => addNode('mediaNode')}
               className="palette-item"
             >
+              <span className="palette-icon">📁</span>
               <span>Mídia</span>
             </button>
           </div>
