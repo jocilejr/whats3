@@ -3187,17 +3187,15 @@ HTML_APP = '''<!DOCTYPE html>
             </div>
             
             <div id="mediaMessageDiv" style="margin: 20px 0; display: none;">
-                <label style="display: block; margin-bottom: 5px; font-weight: 500;">URL da Mídia:</label>
-                <input type="url" id="scheduleMediaUrl" class="form-input"
-                       placeholder="https://exemplo.com/arquivo.jpg"
-                       onchange="previewMedia()">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Arquivo de Mídia:</label>
+                <input type="hidden" id="scheduleMediaUrl">
                 <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
                     <input type="file" id="scheduleMediaFile" style="display:none"
                            accept="image/*,video/*,audio/*"
                            onchange="uploadMediaFile(this.files[0], 'scheduleMediaUrl', 'scheduleMediaUploadStatus')">
                     <button type="button" class="btn btn-secondary"
                             onclick="document.getElementById('scheduleMediaFile').click()">
-                        📁 Upload de Arquivo
+                        📁 Selecionar Arquivo
                     </button>
                     <span style="font-size: 0.85rem; color: #64748b;">
                         O link será preenchido automaticamente após o envio.
@@ -4377,6 +4375,9 @@ HTML_APP = '''<!DOCTYPE html>
                 if (targetInput) {
                     targetInput.value = data.url;
                     targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    if (targetFieldId === 'scheduleMediaUrl') {
+                        previewMedia();
+                    }
                 }
 
                 if (statusElement) {
@@ -4392,7 +4393,6 @@ HTML_APP = '''<!DOCTYPE html>
                 } else if (targetFieldId === 'scheduleMediaUrl') {
                     const scheduleFileInput = document.getElementById('scheduleMediaFile');
                     if (scheduleFileInput) scheduleFileInput.value = '';
-                    previewMedia();
                 }
             } catch (err) {
                 console.error(err);
@@ -5964,12 +5964,16 @@ HTML_APP = '''<!DOCTYPE html>
             const mediaDiv = document.getElementById('mediaMessageDiv');
             const mediaPreview = document.getElementById('mediaPreview');
             const uploadStatus = document.getElementById('scheduleMediaUploadStatus');
+            const mediaUrlInput = document.getElementById('scheduleMediaUrl');
 
             if (messageType === 'text') {
                 textDiv.style.display = 'block';
                 mediaDiv.style.display = 'none';
                 mediaPreview.style.display = 'none';
                 mediaPreview.innerHTML = '';
+                if (mediaUrlInput) {
+                    mediaUrlInput.value = '';
+                }
                 if (uploadStatus) {
                     uploadStatus.textContent = '';
                     uploadStatus.style.color = '#64748b';
@@ -5977,6 +5981,12 @@ HTML_APP = '''<!DOCTYPE html>
             } else {
                 textDiv.style.display = 'none';
                 mediaDiv.style.display = 'block';
+                if (mediaUrlInput && mediaUrlInput.value) {
+                    previewMedia();
+                } else {
+                    mediaPreview.style.display = 'none';
+                    mediaPreview.innerHTML = '';
+                }
             }
         }
         
@@ -6133,7 +6143,12 @@ HTML_APP = '''<!DOCTYPE html>
                     mediaUrl = document.getElementById('scheduleMediaUrl').value.trim();
                     messageContent = document.getElementById('scheduleMediaCaption').value.trim();
                     if (!mediaUrl) {
-                        alert('❌ Insira a URL da mídia');
+                        const statusElement = document.getElementById('scheduleMediaUploadStatus');
+                        if (statusElement) {
+                            statusElement.style.color = '#dc2626';
+                            statusElement.textContent = '❌ Envie um arquivo de mídia antes de agendar.';
+                        }
+                        alert('❌ Envie um arquivo de mídia antes de agendar.');
                         return;
                     }
                 }
