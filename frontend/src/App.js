@@ -28,54 +28,30 @@ const QRCode = ({ value }) => {
   );
 };
 
+const NAV_ITEMS = [
+  { id: 'dashboard', icon: '📊', label: 'Dashboard' },
+  { id: 'flows', icon: '🎯', label: 'Fluxos' },
+  { id: 'contacts', icon: '👥', label: 'Contatos' },
+  { id: 'messages', icon: '💬', label: 'Mensagens' },
+  { id: 'instances', icon: '📱', label: 'Instâncias' },
+  { id: 'settings', icon: '⚙️', label: 'Configurações' }
+];
+
 // Navigation Component
 const Navigation = ({ currentView, onViewChange }) => {
   return (
-    <nav className="main-navigation">
-      <div className="nav-items">
-        <button 
-          className={`nav-item ${currentView === 'dashboard' ? 'active' : ''}`}
-          onClick={() => onViewChange('dashboard')}
-        >
-          <span className="nav-icon">📊</span>
-          <span>Dashboard</span>
-        </button>
-        <button 
-          className={`nav-item ${currentView === 'flows' ? 'active' : ''}`}
-          onClick={() => onViewChange('flows')}
-        >
-          <span className="nav-icon">🎯</span>
-          <span>Fluxos</span>
-        </button>
-        <button 
-          className={`nav-item ${currentView === 'contacts' ? 'active' : ''}`}
-          onClick={() => onViewChange('contacts')}
-        >
-          <span className="nav-icon">👥</span>
-          <span>Contatos</span>
-        </button>
-        <button 
-          className={`nav-item ${currentView === 'messages' ? 'active' : ''}`}
-          onClick={() => onViewChange('messages')}
-        >
-          <span className="nav-icon">💬</span>
-          <span>Mensagens</span>
-        </button>
+    <nav className="app-nav">
+      {NAV_ITEMS.map((item) => (
         <button
-          className={`nav-item ${currentView === 'instances' ? 'active' : ''}`}
-          onClick={() => onViewChange('instances')}
+          key={item.id}
+          type="button"
+          className={`nav-button ${currentView === item.id ? 'active' : ''}`}
+          onClick={() => onViewChange(item.id)}
         >
-          <span className="nav-icon">📱</span>
-          <span>Instâncias</span>
+          <span className="nav-button-icon">{item.icon}</span>
+          <span className="nav-button-label">{item.label}</span>
         </button>
-        <button
-          className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
-          onClick={() => onViewChange('settings')}
-        >
-          <span className="nav-icon">⚙️</span>
-          <span>Configurações</span>
-        </button>
-      </div>
+      ))}
     </nav>
   );
 };
@@ -156,17 +132,26 @@ const WhatsAppConnection = () => {
     setLoading(false);
   };
 
+  const statusLabel =
+    status === 'connected'
+      ? 'Conectado'
+      : status === 'disconnected'
+        ? 'Desconectado'
+        : 'Erro';
+
   return (
-    <div className="whatsapp-connection">
-      <div className="connection-header">
-        <h2>🔗 Conexão WhatsApp</h2>
+    <div className="card whatsapp-card">
+      <div className="card-header">
+        <div>
+          <h2>🔗 Conexão WhatsApp</h2>
+          <p className="card-subtitle">
+            Monitore suas instâncias em tempo real e mantenha a automação ativa.
+          </p>
+        </div>
         <div className={`status-indicator ${status}`}>
-          <div className="status-dot"></div>
-          <span className="status-text">
-            {status === 'connected' ? 'Conectado' : 
-             status === 'disconnected' ? 'Desconectado' : 'Erro'}
-            {isDemoMode && ' (Demo)'}
-          </span>
+          <div className="status-dot" />
+          <span className="status-text">{statusLabel}</span>
+          {isDemoMode && <span className="status-tag">Demo</span>}
         </div>
       </div>
 
@@ -177,10 +162,8 @@ const WhatsAppConnection = () => {
       )}
 
       {status === 'connected' && connectedUser && (
-        <div className="connected-info">
-          <div className="success-badge">
-            ✅ WhatsApp conectado com sucesso!
-          </div>
+        <div className="connection-success">
+          <div className="success-badge">✅ WhatsApp conectado com sucesso!</div>
           <div className="user-info">
             <strong>Usuário:</strong> {connectedUser.name || connectedUser.id}
           </div>
@@ -188,11 +171,11 @@ const WhatsAppConnection = () => {
       )}
 
       {status === 'disconnected' && (
-        <div className="qr-section">
+        <div className="connection-body">
           <div className="warning-badge">
             ⚠️ WhatsApp não está conectado. {isDemoMode ? 'Clique para simular conexão ou ' : ''}Escaneie o QR code para conectar.
           </div>
-          
+
           {qrCode && (
             <div className="qr-display">
               <h3>Escaneie este QR Code com o WhatsApp:</h3>
@@ -202,21 +185,23 @@ const WhatsAppConnection = () => {
               </p>
             </div>
           )}
-          
+
           <div className="button-group">
-            <button 
+            <button
               className="connect-button"
               onClick={handleConnect}
               disabled={loading}
+              type="button"
             >
               {loading ? 'Conectando...' : 'Conectar WhatsApp'}
             </button>
-            
+
             {isDemoMode && (
-              <button 
+              <button
                 className="demo-button"
                 onClick={simulateConnection}
                 disabled={loading}
+                type="button"
               >
                 🎯 Simular Conexão (Demo)
               </button>
@@ -257,9 +242,11 @@ const DashboardStats = () => {
 
     return () => clearInterval(interval);
   }, []);
-
   return (
-    <div className="dashboard-stats">
+    <div className="card stats-card">
+      <div className="card-header">
+        <h2>📊 Estatísticas do Sistema</h2>
+      </div>
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon">👥</div>
@@ -268,7 +255,7 @@ const DashboardStats = () => {
             <p>Novos contatos hoje</p>
           </div>
         </div>
-        
+
         <div className="stat-card">
           <div className="stat-icon">💬</div>
           <div className="stat-content">
@@ -276,7 +263,7 @@ const DashboardStats = () => {
             <p>Conversas ativas</p>
           </div>
         </div>
-        
+
         <div className="stat-card">
           <div className="stat-icon">📨</div>
           <div className="stat-content">
@@ -290,7 +277,10 @@ const DashboardStats = () => {
 };
 
 // Contacts List Component
-const ContactsList = () => {
+const ContactsList = ({
+  title = '📞 Contatos Recentes',
+  description = 'Os contatos aparecerão aqui assim que começarem a enviar mensagens.'
+}) => {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -308,14 +298,23 @@ const ContactsList = () => {
 
     fetchContacts();
   }, []);
-
   if (loading) {
-    return <div className="loading">Carregando contatos...</div>;
+    return (
+      <div className="card contacts-card">
+        <div className="loading">Carregando contatos...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="contacts-list">
-      <h3>📞 Contatos Recentes</h3>
+    <div className="card contacts-card">
+      <div className="card-header">
+        <div>
+          <h3>{title}</h3>
+          <p className="card-subtitle">{description}</p>
+        </div>
+      </div>
+
       {contacts.length === 0 ? (
         <div className="empty-state">
           <p>Nenhum contato encontrado ainda.</p>
@@ -323,7 +322,7 @@ const ContactsList = () => {
         </div>
       ) : (
         <div className="contacts-grid">
-          {contacts.slice(0, 6).map(contact => (
+          {contacts.slice(0, 6).map((contact) => (
             <div key={contact.id} className="contact-card">
               <div className="contact-avatar">
                 {contact.name.charAt(0).toUpperCase()}
@@ -332,7 +331,7 @@ const ContactsList = () => {
                 <h4>{contact.name}</h4>
                 <p>{contact.phone_number}</p>
                 <div className="contact-tags">
-                  {contact.tags.map(tag => (
+                  {contact.tags.map((tag) => (
                     <span key={tag} className="tag">{tag}</span>
                   ))}
                 </div>
@@ -398,60 +397,66 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="header-content">
-          <h1>🤖 WhatsFlow</h1>
-          <p>Sistema de Automação para WhatsApp</p>
-        </div>
-      </header>
+    <div className="app professional-app">
+      <div className="app-surface">
+        <div className="app-container">
+          <header className="app-hero">
+            <h1>🚀 WhatsFlow Professional</h1>
+            <p>Sistema avançado de automação WhatsApp com tempo real e múltiplas instâncias.</p>
+            <div className="hero-badge">
+              ✅ Conexão estável • Webhooks • Fluxos inteligentes
+            </div>
+          </header>
 
-      <Navigation currentView={currentView} onViewChange={setCurrentView} />
+          <Navigation currentView={currentView} onViewChange={setCurrentView} />
 
-      <main className="app-main">
-        <div className="container">
-          {currentView === 'dashboard' && (
-            <>
-              <WhatsAppConnection />
-              
-              <section className="dashboard-section">
-                <h2>📊 Dashboard</h2>
+          <main className="app-content">
+            {currentView === 'dashboard' && (
+              <div className="view-grid">
+                <WhatsAppConnection />
                 <DashboardStats />
-              </section>
-
-              <section className="contacts-section">
                 <ContactsList />
+              </div>
+            )}
+
+            {currentView === 'flows' && (
+              <section className="view-section">
+                <FlowList
+                  onCreateFlow={handleCreateFlow}
+                  onEditFlow={handleEditFlow}
+                />
               </section>
-            </>
-          )}
+            )}
 
-          {currentView === 'flows' && (
-            <FlowList
-              onCreateFlow={handleCreateFlow}
-              onEditFlow={handleEditFlow}
-            />
-          )}
+            {currentView === 'contacts' && (
+              <section className="view-section">
+                <ContactsList
+                  title="👥 Gerenciamento de Contatos"
+                  description="Acompanhe seus contatos sincronizados e etiquetas aplicadas."
+                />
+              </section>
+            )}
 
-          {currentView === 'contacts' && (
-            <section className="contacts-section">
-              <h2>👥 Gerenciamento de Contatos</h2>
-              <ContactsList />
-            </section>
-          )}
+            {currentView === 'messages' && (
+              <section className="view-section">
+                <MessagesCenter baileysHealthy={baileysHealthy} />
+              </section>
+            )}
 
-          {currentView === 'messages' && (
-            <MessagesCenter baileysHealthy={baileysHealthy} />
-          )}
+            {currentView === 'instances' && (
+              <section className="view-section">
+                <WhatsAppInstances />
+              </section>
+            )}
 
-          {currentView === 'instances' && (
-            <WhatsAppInstances />
-          )}
-
-          {currentView === 'settings' && (
-            <Settings />
-          )}
+            {currentView === 'settings' && (
+              <section className="view-section">
+                <Settings />
+              </section>
+            )}
+          </main>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

@@ -68,11 +68,15 @@ export default function FlowList({ onCreateFlow, onEditFlow }) {
   };
 
   if (loading) {
-    return <div className="loading">Carregando fluxos...</div>;
+    return (
+      <div className="card flow-list">
+        <div className="loading">Carregando fluxos...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="flow-list">
+    <div className="card flow-list">
       <div className="flow-list-header">
         <h2>🎯 Fluxos de Automação</h2>
         <button onClick={onCreateFlow} className="create-flow-button">
