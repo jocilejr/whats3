@@ -85,6 +85,59 @@ _MINIO_BUCKET_POLICY_APPLIED = False
 Minio = None
 
 
+DEFAULT_SCHEDULED_MESSAGE_TYPES: Set[str] = {
+    "text",
+    "image",
+    "audio",
+    "video",
+    "document",
+    "sticker",
+    "location",
+    "contact",
+    "poll",
+}
+
+SCHEDULED_MESSAGE_MEDIA_REQUIRED_TYPES: Set[str] = {
+    "image",
+    "audio",
+    "video",
+    "document",
+    "sticker",
+}
+
+
+def _load_allowed_scheduled_message_types() -> Set[str]:
+    """Return the allowed message types for scheduled messages."""
+
+    env_key = "WHATSFLOW_SCHEDULED_MESSAGE_TYPES"
+    allowed = set(DEFAULT_SCHEDULED_MESSAGE_TYPES)
+    extra = os.environ.get(env_key)
+    if extra:
+        for raw_value in extra.split(","):
+            normalized = raw_value.strip().lower()
+            if normalized:
+                allowed.add(normalized)
+    return allowed
+
+
+SCHEDULED_MESSAGE_ALLOWED_TYPES: Set[str] = _load_allowed_scheduled_message_types()
+
+
+def _format_allowed_message_types() -> str:
+    """Format the allowed message types for human readable messages."""
+
+    return ", ".join(sorted(SCHEDULED_MESSAGE_ALLOWED_TYPES))
+
+
+def normalize_scheduled_message_type(value: Optional[str]) -> str:
+    """Normalize user provided message type values."""
+
+    if value is None:
+        return "text"
+    normalized = str(value).strip().lower()
+    return normalized or "text"
+
+
 def ensure_minio_credentials_table() -> None:
     """Ensure the table used to persist MinIO credentials exists."""
 
@@ -8176,7 +8229,7 @@ def init_db():
             id TEXT PRIMARY KEY,
             campaign_id TEXT NOT NULL,
             message_text TEXT,
-            message_type TEXT DEFAULT 'text', -- text, image, audio, video
+            message_type TEXT DEFAULT 'text', -- tipo da mensagem (texto, mídia ou outros formatos compatíveis)
             media_url TEXT, -- URL for media files
             schedule_type TEXT NOT NULL, -- once, weekly
             schedule_time TEXT NOT NULL, -- HH:MM format
@@ -9096,9 +9149,25 @@ class MessageScheduler:
             for row in messages_to_send:
                 try:
                     message_id = row[0]
-                    message_text = row[2]
-                    message_type = row[3]
-                    media_url = row[4]
+                    message_text = (row[2] or "")
+                    original_message_type = row[3]
+                    message_type = normalize_scheduled_message_type(original_message_type)
+
+                    if message_type not in SCHEDULED_MESSAGE_ALLOWED_TYPES:
+                        logger.warning(
+                            "Tipo de mensagem não suportado '%s' para agendamento %s. Mensagem ignorada.",
+                            original_message_type,
+                            message_id,
+                        )
+                        continue
+
+                    raw_media_url = row[4]
+                    if isinstance(raw_media_url, str):
+                        media_url = raw_media_url.strip() or None
+                    elif raw_media_url is None:
+                        media_url = None
+                    else:
+                        media_url = str(raw_media_url).strip() or None
                     schedule_type = row[5]
                     schedule_time = row[6]
                     schedule_days = row[7]
@@ -9199,7 +9268,28 @@ class MessageScheduler:
                 print(f"❌ {error_msg}")
                 return False, error_msg
 
-            payload: Dict[str, Any]
+update-sql-schema-and-functions
+            message_type = normalize_scheduled_message_type(message_type)
+            if message_type not in SCHEDULED_MESSAGE_ALLOWED_TYPES:
+                error_msg = f"Tipo de mensagem não suportado: {message_type}"
+                logger.warning(error_msg)
+                return False, error_msg
+
+            if isinstance(media_url, str):
+                clean_media_url = media_url.strip() or None
+            elif media_url is None:
+                clean_media_url = None
+            else:
+                clean_media_url = str(media_url).strip() or None
+
+            if message_type in SCHEDULED_MESSAGE_MEDIA_REQUIRED_TYPES and not clean_media_url:
+                error_msg = (
+                    f"URL de mídia obrigatória para mensagens do tipo '{message_type}'"
+                )
+                logger.warning(error_msg)
+                return False, error_msg
+
+
             if message_type == 'text':
                 payload = {
                     'to': group_id,
@@ -9213,8 +9303,9 @@ class MessageScheduler:
                 payload = {
                     'to': group_id,
                     'type': message_type,
-                    'mediaUrl': media_url,
                 }
+                if clean_media_url:
+                    payload['mediaUrl'] = clean_media_url
                 if message_text:
                     payload['message'] = message_text
             elif message_type == 'location':
@@ -9279,7 +9370,7 @@ class MessageScheduler:
 
             for attempt in range(3):
                 try:
-                    log_details = f"message_type={message_type}, media_url={media_url}"
+                    log_details = f"message_type={message_type}, media_url={clean_media_url}"
                     if message_type == 'text':
                         logger.info(
                             f"📤 Enviando mensagem de texto ao grupo {group_id} ({log_details})"
@@ -11239,12 +11330,21 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 created_at = row[11]
                 groups_count = row[12]
 
+                message_type = normalize_scheduled_message_type(row[3])
+                raw_media_url = row[4]
+                if isinstance(raw_media_url, str):
+                    media_url = raw_media_url.strip() or None
+                elif raw_media_url is None:
+                    media_url = None
+                else:
+                    media_url = str(raw_media_url).strip() or None
+
                 messages.append({
                     'id': row[0],
                     'campaign_id': row[1],
                     'message_text': row[2],
-                    'message_type': row[3],
-                    'media_url': row[4],
+                    'message_type': message_type,
+                    'media_url': media_url,
                     'schedule_type': row[5],
                     'schedule_time': row[6],
                     'schedule_days': row[7],
@@ -11288,12 +11388,21 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 group_name = row[13]
                 instance_id = row[14]
 
+                message_type = normalize_scheduled_message_type(row[3])
+                raw_media_url = row[4]
+                if isinstance(raw_media_url, str):
+                    media_url = raw_media_url.strip() or None
+                elif raw_media_url is None:
+                    media_url = None
+                else:
+                    media_url = str(raw_media_url).strip() or None
+
                 messages.append({
                     'id': row[0],
                     'campaign_id': row[1],
                     'message_text': row[2],
-                    'message_type': row[3],
-                    'media_url': row[4],
+                    'message_type': message_type,
+                    'media_url': media_url,
                     'schedule_type': row[5],
                     'schedule_time': row[6],
                     'schedule_days': row[7],
@@ -11332,11 +11441,72 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             campaign_id = data.get('campaign_id', None)
             
             # Optional fields
-            message_text = data.get('message_text', '')
-            message_type = data.get('message_type', 'text')
-            media_url = data.get('media_url', '')
+            raw_message_text = data.get('message_text', '')
+            message_text = (
+                raw_message_text
+                if isinstance(raw_message_text, str)
+                else str(raw_message_text)
+            )
+
+            message_type = normalize_scheduled_message_type(
+                data.get('message_type', 'text')
+            )
+            if message_type not in SCHEDULED_MESSAGE_ALLOWED_TYPES:
+                allowed_values = _format_allowed_message_types()
+                self.send_json_response(
+                    {
+                        "error": (
+                            "Tipo de mensagem inválido. Valores permitidos: "
+                            f"{allowed_values}"
+                        )
+                    },
+                    400,
+                )
+                return
+
+            raw_media_url = data.get('media_url')
+            if isinstance(raw_media_url, str):
+                media_url = raw_media_url.strip()
+            elif raw_media_url is None:
+                media_url = ''
+            else:
+                media_url = str(raw_media_url).strip()
+
+            clean_media_url = media_url or None
+            if (
+                message_type in SCHEDULED_MESSAGE_MEDIA_REQUIRED_TYPES
+                and not clean_media_url
+            ):
+                self.send_json_response(
+                    {
+                        "error": (
+                            "URL de mídia é obrigatória para mensagens do tipo "
+                            f"'{message_type}'"
+                        )
+                    },
+                    400,
+                )
+                return
+
             schedule_date = data.get('schedule_date')
-            schedule_days = data.get('schedule_days', [])
+
+            schedule_days_raw = data.get('schedule_days', [])
+            if isinstance(schedule_days_raw, str):
+                try:
+                    parsed_days = json.loads(schedule_days_raw)
+                    schedule_days = parsed_days if isinstance(parsed_days, list) else []
+                except json.JSONDecodeError:
+                    schedule_days = []
+            elif isinstance(schedule_days_raw, list):
+                schedule_days = schedule_days_raw
+            else:
+                schedule_days = []
+
+            schedule_days = [
+                str(day).strip().lower()
+                for day in schedule_days
+                if isinstance(day, str) and day.strip()
+            ]
             
             if not all([group_id, group_name, instance_id, schedule_type, schedule_time]):
                 self.send_json_response({"error": "Campos obrigatórios faltando"}, 400)
@@ -11412,17 +11582,29 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             message_id = str(uuid.uuid4())
             created_at = datetime.now().isoformat()
             
-            cursor.execute("""
-                INSERT INTO scheduled_messages 
-                (id, campaign_id, message_text, message_type, media_url, 
-                 schedule_type, schedule_time, schedule_days, schedule_date, 
+            cursor.execute(
+                """
+                INSERT INTO scheduled_messages
+                (id, campaign_id, message_text, message_type, media_url,
+                 schedule_type, schedule_time, schedule_days, schedule_date,
                  is_active, next_run, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                message_id, campaign_id, message_text, message_type, media_url,
-                schedule_type, schedule_time, json.dumps(schedule_days), schedule_date,
-                1, next_run, created_at
-            ))
+                """,
+                (
+                    message_id,
+                    campaign_id,
+                    message_text,
+                    message_type,
+                    clean_media_url,
+                    schedule_type,
+                    schedule_time,
+                    json.dumps(schedule_days),
+                    schedule_date,
+                    1,
+                    next_run,
+                    created_at,
+                ),
+            )
             
             # Store group and instance info in separate table for easier querying
             cursor.execute("""
