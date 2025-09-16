@@ -277,12 +277,34 @@ def _ensure_minio_dependency():
         Minio = importlib.import_module("minio").Minio
         return Minio
     except ModuleNotFoundError:
+        print("📦 Instalando dependência 'minio' (necessária para integração com MinIO)...")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "minio"])
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "--user", "minio"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as install_exc:
+            stderr_output = ""
+            if install_exc.stderr:
+                stderr_output = install_exc.stderr.decode(errors="ignore")
+            elif install_exc.output:
+                stderr_output = install_exc.output.decode(errors="ignore")
+
+            if "externally managed environment" in stderr_output.lower():
+                raise RuntimeError(
+                    "O ambiente Python é gerenciado externamente (PEP 668). "
+                    "Crie um ambiente virtual ou execute o comando novamente com --break-system-packages."
+                ) from install_exc
+
+            raise RuntimeError(
+                "Não foi possível instalar automaticamente a biblioteca 'minio'. "
+                "Instale-a manualmente executando: python3 -m pip install --user minio"
+            ) from install_exc
         except Exception as install_exc:
             raise RuntimeError(
                 "Não foi possível instalar automaticamente a biblioteca 'minio'. "
-                "Instale-a manualmente executando: python3 -m pip install minio"
+                "Instale-a manualmente executando: python3 -m pip install --user minio"
             ) from install_exc
 
         try:
@@ -291,7 +313,7 @@ def _ensure_minio_dependency():
         except ModuleNotFoundError as exc:
             raise RuntimeError(
                 "Biblioteca 'minio' não pôde ser importada mesmo após tentativa de instalação automática. "
-                "Instale-a manualmente executando: python3 -m pip install minio"
+                "Instale-a manualmente executando: python3 -m pip install --user minio"
             ) from exc
 
 
