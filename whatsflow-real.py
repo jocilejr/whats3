@@ -9266,7 +9266,6 @@ class MessageScheduler:
                 print(f"❌ {error_msg}")
                 return False, error_msg
 
-update-sql-schema-and-functions
             message_type = normalize_scheduled_message_type(message_type)
             if message_type not in SCHEDULED_MESSAGE_ALLOWED_TYPES:
                 error_msg = f"Tipo de mensagem não suportado: {message_type}"
