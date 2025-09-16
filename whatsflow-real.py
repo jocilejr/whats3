@@ -31,9 +31,6 @@ import cgi
 
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="cgi")
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 requests = None
 
 
@@ -74,12 +71,7 @@ DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
 
-MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT")
-if not MINIO_ENDPOINT_RAW:
-    raise RuntimeError(
-        "Variável de ambiente MINIO_ENDPOINT não configurada. "
-        "Defina o endereço do servidor MinIO antes de iniciar o aplicativo."
-    )
+MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
 MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4")
 MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "meu-bucket")
@@ -146,12 +138,6 @@ def get_minio_client():
         raise RuntimeError(
             "Credenciais do MinIO não configuradas. Defina MINIO_ACCESS_KEY e MINIO_SECRET_KEY."
         )
-
-    logger.info(
-        "Inicializando cliente MinIO para %s (secure=%s)",
-        _MINIO_ENDPOINT,
-        _MINIO_SECURE_DEFAULT,
-    )
 
     _MINIO_CLIENT = minio_cls(
         _MINIO_ENDPOINT,
@@ -245,6 +231,10 @@ def check_service_health(api_base_url: str) -> bool:
     except requests.RequestException as e:
         print(f"❌ Não foi possível acessar Baileys em {url}: {e}")
         return False
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # HTML da aplicação (mesmo do Pure, mas com conexão real)
 HTML_APP = '''<!DOCTYPE html>
