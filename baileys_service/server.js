@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { DisconnectReason, useMultiFileAuthState, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { DisconnectReason, useMultiFileAuthState, downloadMediaMessage, jidNormalizedUser } = require('@whiskeysockets/baileys');
 const makeWASocket = require('@whiskeysockets/baileys').default;
 const qrTerminal = require('qrcode-terminal');
 const fs = require('fs');
@@ -19,6 +19,227 @@ app.use(express.json());
 let instances = new Map(); // instanceId -> { sock, qr, connected, connecting, user }
 let currentQR = null;
 let qrUpdateInterval = null;
+
+const PARTICIPANT_ACTIONS = new Set(['add', 'remove', 'promote', 'demote']);
+
+const normalizeJid = (jid) => {
+    if (!jid || typeof jid !== 'string') {
+        return jid;
+    }
+
+    try {
+        return jidNormalizedUser(jid);
+    } catch (err) {
+        return jid;
+    }
+};
+
+const ensureGroupJid = (groupId) => {
+    if (!groupId || typeof groupId !== 'string') {
+        throw new Error('ID do grupo inválido');
+    }
+
+    const trimmed = groupId.trim();
+    if (!trimmed) {
+        throw new Error('ID do grupo inválido');
+    }
+
+    return trimmed.endsWith('@g.us') ? trimmed : `${trimmed}@g.us`;
+};
+
+const ensureParticipantJid = (participant) => {
+    if (!participant || typeof participant !== 'string') {
+        throw new Error('Participante inválido');
+    }
+
+    const trimmed = participant.trim();
+    if (!trimmed) {
+        throw new Error('Participante inválido');
+    }
+
+    if (trimmed.includes('@')) {
+        return trimmed;
+    }
+
+    return `${trimmed}@s.whatsapp.net`;
+};
+
+const getInstanceOrThrow = (instanceId) => {
+    const instance = instances.get(instanceId);
+    if (!instance || !instance.connected || !instance.sock) {
+        const error = new Error(`Instância ${instanceId} não está conectada`);
+        error.statusCode = 400;
+        throw error;
+    }
+
+    return instance;
+};
+
+const ensureGroupCache = (instance) => {
+    if (!instance.groupMetadata) {
+        instance.groupMetadata = new Map();
+    }
+    return instance.groupMetadata;
+};
+
+const getMeJid = (instance) => {
+    const userId = instance?.sock?.user?.id;
+    if (!userId) {
+        return null;
+    }
+
+    return normalizeJid(userId);
+};
+
+const buildParticipantsSummary = (participants = [], meJid = null) => {
+    return participants.map((participant) => {
+        const id = participant?.id || participant?.jid || participant?.user || participant?.participant || participant;
+        const participantJid = typeof id === 'string' ? id : '';
+        const normalized = participantJid ? normalizeJid(participantJid) : participantJid;
+        const adminValue = participant?.admin;
+        const isAdmin = Boolean(adminValue && adminValue !== 'none');
+        const isSuperAdmin = adminValue === 'superadmin';
+        const isMe = meJid ? normalizeJid(participantJid) === meJid : false;
+
+        return {
+            id: participantJid || normalized,
+            jid: participantJid || normalized,
+            name: participant?.name || participant?.notify || participant?.displayName || '',
+            isAdmin,
+            isSuperAdmin,
+            isMe,
+            phone: normalized?.endsWith('@s.whatsapp.net') ? normalized.replace('@s.whatsapp.net', '') : undefined,
+            status: participant?.status
+        };
+    });
+};
+
+const serializeGroupMetadata = (metadata, instance) => {
+    if (!metadata) {
+        return null;
+    }
+
+    const meJid = getMeJid(instance);
+    const participants = buildParticipantsSummary(metadata.participants || [], meJid);
+    const isAdmin = participants.some((participant) => participant.isMe && participant.isAdmin);
+
+    const announcementFlag = metadata?.announce;
+    const restrictFlag = metadata?.restrict;
+
+    return {
+        id: metadata.id || metadata.jid || metadata.gid,
+        jid: metadata.id || metadata.jid || metadata.gid,
+        name: metadata.subject || metadata.name || 'Grupo sem nome',
+        description: metadata.desc || metadata.description || '',
+        owner: metadata.owner || metadata.creator || metadata.superAdmin,
+        participants,
+        participantCount: participants.length,
+        permissions: {
+            isAdmin,
+            canManageParticipants: isAdmin,
+            canEditInfo: isAdmin
+        },
+        settings: {
+            announcement: announcementFlag === true || announcementFlag === 'true',
+            locked: restrictFlag === true || restrictFlag === 'true',
+            ephemeralDuration: metadata.ephemeralDuration || null
+        },
+        creation: metadata.creation || null,
+        createdAt: metadata.creation ? new Date(metadata.creation * 1000).toISOString() : null,
+        lastSyncedAt: metadata.lastSynced ? new Date(metadata.lastSynced).toISOString() : null
+    };
+};
+
+const refreshGroupCache = async (instanceId) => {
+    const instance = getInstanceOrThrow(instanceId);
+    const cache = ensureGroupCache(instance);
+
+    const groups = await instance.sock.groupFetchAllParticipating();
+    cache.clear();
+
+    const timestamp = Date.now();
+    for (const [groupJid, metadata] of Object.entries(groups)) {
+        metadata.id = groupJid;
+        metadata.lastSynced = timestamp;
+        cache.set(groupJid, metadata);
+    }
+
+    instance.groupCacheInitialized = true;
+    instance.groupCacheTimestamp = timestamp;
+
+    return cache;
+};
+
+const getGroupMetadataFromCache = async (instanceId, groupId, { forceRefresh = false } = {}) => {
+    const instance = getInstanceOrThrow(instanceId);
+    const cache = ensureGroupCache(instance);
+    const groupJid = ensureGroupJid(groupId);
+
+    let metadata = cache.get(groupJid);
+    if (!metadata || forceRefresh) {
+        metadata = await instance.sock.groupMetadata(groupJid);
+        metadata.id = groupJid;
+        metadata.lastSynced = Date.now();
+        cache.set(groupJid, metadata);
+    }
+
+    return { instance, metadata, groupJid };
+};
+
+const ensureAdminPrivileges = async (instanceId, groupId) => {
+    const { instance, metadata, groupJid } = await getGroupMetadataFromCache(instanceId, groupId);
+    const meJid = getMeJid(instance);
+    const participants = metadata?.participants || [];
+
+    const isAdmin = participants.some((participant) => {
+        const participantId = participant?.id || participant?.jid;
+        if (!participantId) {
+            return false;
+        }
+        return normalizeJid(participantId) === meJid && participant?.admin;
+    });
+
+    if (!isAdmin) {
+        const error = new Error('Usuário conectado não é administrador do grupo');
+        error.statusCode = 403;
+        throw error;
+    }
+
+    return { instance, metadata, groupJid };
+};
+
+const applyParticipantsChange = (metadata, participants, action) => {
+    if (!metadata.participants) {
+        metadata.participants = [];
+    }
+
+    const normalizedMap = new Map();
+    for (const participant of metadata.participants) {
+        const participantId = participant?.id || participant?.jid;
+        if (!participantId) {
+            continue;
+        }
+        normalizedMap.set(normalizeJid(participantId), { ...participant });
+    }
+
+    for (const participant of participants) {
+        const participantJid = normalizeJid(ensureParticipantJid(participant));
+        const existing = normalizedMap.get(participantJid) || { id: participantJid };
+
+        if (action === 'add') {
+            normalizedMap.set(participantJid, { ...existing, id: existing.id || participantJid });
+        } else if (action === 'remove') {
+            normalizedMap.delete(participantJid);
+        } else if (action === 'promote') {
+            normalizedMap.set(participantJid, { ...existing, id: existing.id || participantJid, admin: existing.admin === 'superadmin' ? 'superadmin' : 'admin' });
+        } else if (action === 'demote') {
+            normalizedMap.set(participantJid, { ...existing, id: existing.id || participantJid, admin: null });
+        }
+    }
+
+    metadata.participants = Array.from(normalizedMap.values());
+    metadata.lastSynced = Date.now();
+};
 
 // QR Code auto-refresh every 30 seconds (WhatsApp QR expires after 60s)
 const startQRRefresh = (instanceId) => {
@@ -72,7 +293,10 @@ async function connectInstance(instanceId) {
             connected: false,
             connecting: true,
             user: null,
-            lastSeen: new Date()
+            lastSeen: new Date(),
+            groupMetadata: new Map(),
+            groupCacheInitialized: false,
+            groupCacheTimestamp: null
         });
 
         sock.ev.on('connection.update', async (update) => {
@@ -103,6 +327,11 @@ async function connectInstance(instanceId) {
                 instance.connected = false;
                 instance.connecting = false;
                 instance.user = null;
+                if (instance.groupMetadata) {
+                    instance.groupMetadata.clear();
+                }
+                instance.groupCacheInitialized = false;
+                instance.groupCacheTimestamp = null;
                 stopQRRefresh();
                 
                 // Implement robust reconnection logic
@@ -168,9 +397,9 @@ async function connectInstance(instanceId) {
                     profilePictureUrl: null,
                     phone: sock.user.id.split(':')[0]
                 };
-                
+
                 console.log(`👤 Usuário conectado: ${instance.user.name} (${instance.user.phone})`);
-                
+
                 // Try to get profile picture
                 try {
                     const profilePic = await sock.profilePictureUrl(sock.user.id, 'image');
@@ -179,7 +408,14 @@ async function connectInstance(instanceId) {
                 } catch (err) {
                     console.log('⚠️ Não foi possível obter foto do perfil');
                 }
-                
+
+                try {
+                    await refreshGroupCache(instanceId);
+                    console.log('📚 Cache de grupos inicializado');
+                } catch (err) {
+                    console.log('⚠️ Não foi possível inicializar cache de grupos:', err.message);
+                }
+
                 // Wait a bit before importing chats to ensure connection is stable
                 setTimeout(async () => {
                     try {
@@ -252,7 +488,7 @@ async function connectInstance(instanceId) {
         // Handle incoming messages with better error handling
         sock.ev.on('messages.upsert', async (m) => {
             const messages = m.messages;
-            
+
             for (const message of messages) {
                 if (!message.key.fromMe && message.message) {
                     const from = message.key.remoteJid;
@@ -302,6 +538,77 @@ async function connectInstance(instanceId) {
                             }
                         }
                     }
+                }
+            }
+        });
+
+        sock.ev.on('groups.update', (updates) => {
+            const instance = instances.get(instanceId);
+            if (!instance) {
+                return;
+            }
+
+            const cache = ensureGroupCache(instance);
+            const list = Array.isArray(updates) ? updates : [updates];
+            const timestamp = Date.now();
+
+            for (const update of list) {
+                if (!update || !update.id) {
+                    continue;
+                }
+
+                try {
+                    const groupJid = ensureGroupJid(update.id);
+                    const existing = cache.get(groupJid) || { id: groupJid };
+                    const merged = { ...existing, ...update };
+
+                    if (update.subject !== undefined) {
+                        merged.subject = update.subject;
+                    }
+
+                    if (update.desc !== undefined) {
+                        merged.desc = update.desc;
+                    }
+
+                    merged.lastSynced = timestamp;
+                    cache.set(groupJid, merged);
+                } catch (err) {
+                    console.log('⚠️ Erro ao atualizar metadata do grupo:', err.message);
+                }
+            }
+        });
+
+        sock.ev.on('group-participants.update', async (updates) => {
+            const instance = instances.get(instanceId);
+            if (!instance) {
+                return;
+            }
+
+            const cache = ensureGroupCache(instance);
+            const list = Array.isArray(updates) ? updates : [updates];
+
+            for (const update of list) {
+                if (!update || !update.id || !update.participants || !update.action) {
+                    continue;
+                }
+
+                try {
+                    const groupJid = ensureGroupJid(update.id);
+                    let metadata = cache.get(groupJid);
+
+                    if (!metadata) {
+                        try {
+                            metadata = await instance.sock.groupMetadata(groupJid);
+                            metadata.id = groupJid;
+                        } catch (err) {
+                            metadata = { id: groupJid, participants: [] };
+                        }
+                    }
+
+                    applyParticipantsChange(metadata, update.participants, update.action);
+                    cache.set(groupJid, metadata);
+                } catch (err) {
+                    console.log('⚠️ Erro ao atualizar participantes do grupo:', err.message);
                 }
             }
         });
@@ -989,86 +1296,348 @@ add-media-types-and-validation-in-server.js
 // Groups endpoint with robust error handling  
 app.get('/groups/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    
+    const { refresh } = req.query;
+
     try {
-        const instance = instances.get(instanceId);
-        if (!instance || !instance.connected || !instance.sock) {
-            return res.status(400).json({ 
-                success: false,
-                error: `Instância ${instanceId} não está conectada`,
-                instanceId: instanceId,
-                groups: []
-            });
-        }
-        
-        console.log(`📥 Buscando grupos para instância: ${instanceId}`);
-        
-        // Multiple methods to get groups
-        let groups = [];
-        
-        try {
-            // Method 1: Get group metadata
-            const groupIds = await instance.sock.groupFetchAllParticipating();
-            console.log(`📊 Encontrados ${Object.keys(groupIds).length} grupos via groupFetchAllParticipating`);
-            
-            for (const [groupId, groupData] of Object.entries(groupIds)) {
-                groups.push({
-                    id: groupId,
-                    name: groupData.subject || 'Grupo sem nome',
-                    description: groupData.desc || '',
-                    participants: groupData.participants ? groupData.participants.length : 0,
-                    admin: groupData.participants ? 
-                           groupData.participants.some(p => p.admin && p.id === instance.user?.id) : false,
-                    created: groupData.creation || null
-                });
-            }
-        } catch (error) {
-            console.log(`⚠️ Método 1 falhou: ${error.message}`);
-            
+        const instance = getInstanceOrThrow(instanceId);
+
+        if (refresh === 'true') {
             try {
-                // Method 2: Get chats and filter groups
-                const chats = await instance.sock.getChats();
-                const groupChats = chats.filter(chat => chat.id.endsWith('@g.us'));
-                console.log(`📊 Encontrados ${groupChats.length} grupos via getChats`);
-                
-                groups = groupChats.map(chat => ({
-                    id: chat.id,
-                    name: chat.name || chat.subject || 'Grupo sem nome',
-                    description: chat.description || '',
-                    participants: chat.participantsCount || 0,
-                    admin: false, // Cannot determine admin status from chat
-                    created: chat.timestamp || null,
-                    lastMessage: chat.lastMessage ? {
-                        text: chat.lastMessage.message || '',
-                        timestamp: chat.lastMessage.timestamp
-                    } : null
-                }));
-            } catch (error2) {
-                console.log(`⚠️ Método 2 falhou: ${error2.message}`);
-                
-                // Method 3: Simple fallback - return empty with proper structure
-                groups = [];
+                await refreshGroupCache(instanceId);
+            } catch (err) {
+                console.log('⚠️ Erro ao atualizar cache de grupos:', err.message);
+            }
+        } else if (!instance.groupCacheInitialized) {
+            try {
+                await refreshGroupCache(instanceId);
+            } catch (err) {
+                console.log('⚠️ Cache de grupos não pôde ser inicializado automaticamente:', err.message);
             }
         }
-        
-        console.log(`✅ Retornando ${groups.length} grupos para instância ${instanceId}`);
-        
+
+        const cache = ensureGroupCache(instance);
+        let metadataList = Array.from(cache.values());
+        let source = 'cache';
+
+        if (metadataList.length === 0) {
+            source = 'fallback';
+            try {
+                const chats = await instance.sock.getChats();
+                metadataList = chats
+                    .filter((chat) => chat.id && chat.id.endsWith('@g.us'))
+                    .map((chat) => ({
+                        id: chat.id,
+                        subject: chat.name || chat.subject || 'Grupo sem nome',
+                        desc: chat.description || '',
+                        participants: [],
+                        creation: chat.timestamp,
+                        lastSynced: Date.now()
+                    }));
+            } catch (fallbackError) {
+                console.log('⚠️ Falha no fallback de grupos:', fallbackError.message);
+                metadataList = [];
+            }
+        }
+
+        const groups = metadataList
+            .map((metadata) => serializeGroupMetadata(metadata, instance))
+            .filter(Boolean);
+
         res.json({
             success: true,
-            instanceId: instanceId,
-            groups: groups,
+            instanceId,
+            groups,
             count: groups.length,
+            cache: {
+                initialized: instance.groupCacheInitialized || false,
+                lastSyncedAt: instance.groupCacheTimestamp ? new Date(instance.groupCacheTimestamp).toISOString() : null,
+                source
+            },
             timestamp: new Date().toISOString()
         });
-        
     } catch (error) {
-        console.error(`❌ Erro ao buscar grupos para instância ${instanceId}:`, error);
-        res.status(500).json({
+        const status = error.statusCode || 500;
+        console.error(`❌ Erro ao buscar grupos para instância ${instanceId}:`, error.message);
+        res.status(status).json({
             success: false,
-            error: `Erro interno ao buscar grupos: ${error.message}`,
-            instanceId: instanceId,
+            error: error.message,
+            instanceId,
             groups: []
         });
+    }
+});
+
+app.post('/groups/:instanceId', async (req, res) => {
+    const { instanceId } = req.params;
+    const { subject, participants = [] } = req.body || {};
+
+    if (!subject || typeof subject !== 'string') {
+        return res.status(400).json({ success: false, error: 'Assunto do grupo é obrigatório' });
+    }
+
+    const participantList = Array.isArray(participants) ? participants : [participants];
+    let normalizedParticipants;
+
+    try {
+        normalizedParticipants = Array.from(new Set(participantList.map(ensureParticipantJid)));
+    } catch (err) {
+        return res.status(400).json({ success: false, error: err.message });
+    }
+
+    try {
+        const instance = getInstanceOrThrow(instanceId);
+        const metadata = await instance.sock.groupCreate(subject, normalizedParticipants);
+        const groupJid = ensureGroupJid(metadata.id || metadata.gid);
+
+        metadata.id = groupJid;
+        metadata.lastSynced = Date.now();
+
+        const cache = ensureGroupCache(instance);
+        cache.set(groupJid, metadata);
+        instance.groupCacheInitialized = true;
+        instance.groupCacheTimestamp = metadata.lastSynced;
+
+        res.json({
+            success: true,
+            instanceId,
+            groupId: groupJid,
+            group: serializeGroupMetadata(metadata, instance),
+            participantsAdded: normalizedParticipants.length
+        });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/groups/:instanceId/:groupId/participants', async (req, res) => {
+    const { instanceId, groupId } = req.params;
+    const { action, participants } = req.body || {};
+
+    const normalizedAction = typeof action === 'string' ? action.toLowerCase() : null;
+    if (!normalizedAction || !PARTICIPANT_ACTIONS.has(normalizedAction)) {
+        return res.status(400).json({ success: false, error: 'Ação inválida. Use add, remove, promote ou demote.' });
+    }
+
+    const participantList = Array.isArray(participants) ? participants : [participants];
+    if (!participantList.length) {
+        return res.status(400).json({ success: false, error: 'Informe ao menos um participante' });
+    }
+
+    let normalizedParticipants;
+
+    try {
+        normalizedParticipants = Array.from(new Set(participantList.map(ensureParticipantJid)));
+    } catch (err) {
+        return res.status(400).json({ success: false, error: err.message });
+    }
+
+    try {
+        const { instance, metadata, groupJid } = await ensureAdminPrivileges(instanceId, groupId);
+        const result = await instance.sock.groupParticipantsUpdate(groupJid, normalizedParticipants, normalizedAction);
+
+        applyParticipantsChange(metadata, normalizedParticipants, normalizedAction);
+        ensureGroupCache(instance).set(groupJid, metadata);
+        metadata.lastSynced = Date.now();
+
+        res.json({
+            success: true,
+            instanceId,
+            groupId: groupJid,
+            action: normalizedAction,
+            result: (result || []).map((item, index) => ({
+                jid: item?.jid || normalizedParticipants[index],
+                status: item?.status
+            })),
+            group: serializeGroupMetadata(metadata, instance)
+        });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+app.patch('/groups/:instanceId/:groupId/subject', async (req, res) => {
+    const { instanceId, groupId } = req.params;
+    const { subject } = req.body || {};
+
+    if (!subject || typeof subject !== 'string') {
+        return res.status(400).json({ success: false, error: 'Novo assunto é obrigatório' });
+    }
+
+    try {
+        const { instance, metadata, groupJid } = await ensureAdminPrivileges(instanceId, groupId);
+        await instance.sock.groupUpdateSubject(groupJid, subject);
+
+        metadata.subject = subject;
+        metadata.lastSynced = Date.now();
+        ensureGroupCache(instance).set(groupJid, metadata);
+
+        res.json({
+            success: true,
+            instanceId,
+            groupId: groupJid,
+            group: serializeGroupMetadata(metadata, instance)
+        });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+app.patch('/groups/:instanceId/:groupId/description', async (req, res) => {
+    const { instanceId, groupId } = req.params;
+    const { description = '' } = req.body || {};
+
+    try {
+        const { instance, metadata, groupJid } = await ensureAdminPrivileges(instanceId, groupId);
+        await instance.sock.groupUpdateDescription(groupJid, description);
+
+        metadata.desc = description;
+        metadata.description = description;
+        metadata.lastSynced = Date.now();
+        ensureGroupCache(instance).set(groupJid, metadata);
+
+        res.json({
+            success: true,
+            instanceId,
+            groupId: groupJid,
+            group: serializeGroupMetadata(metadata, instance)
+        });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+app.patch('/groups/:instanceId/:groupId/settings', async (req, res) => {
+    const { instanceId, groupId } = req.params;
+    const { setting, announcement, locked } = req.body || {};
+
+    const operations = [];
+
+    if (setting) {
+        const normalizedSetting = setting.toLowerCase();
+        if (!['announcement', 'not_announcement', 'locked', 'unlocked'].includes(normalizedSetting)) {
+            return res.status(400).json({ success: false, error: 'Setting inválido' });
+        }
+        operations.push(normalizedSetting);
+    }
+
+    if (typeof announcement === 'boolean') {
+        operations.push(announcement ? 'announcement' : 'not_announcement');
+    }
+
+    if (typeof locked === 'boolean') {
+        operations.push(locked ? 'locked' : 'unlocked');
+    }
+
+    if (!operations.length) {
+        return res.status(400).json({ success: false, error: 'Nenhuma alteração informada' });
+    }
+
+    try {
+        const { instance, metadata, groupJid } = await ensureAdminPrivileges(instanceId, groupId);
+        const applied = [];
+
+        for (const op of operations) {
+            await instance.sock.groupSettingUpdate(groupJid, op);
+            applied.push(op);
+
+            if (op === 'announcement') {
+                metadata.announce = 'true';
+            } else if (op === 'not_announcement') {
+                metadata.announce = 'false';
+            } else if (op === 'locked') {
+                metadata.restrict = 'true';
+            } else if (op === 'unlocked') {
+                metadata.restrict = 'false';
+            }
+        }
+
+        metadata.lastSynced = Date.now();
+        ensureGroupCache(instance).set(groupJid, metadata);
+
+        res.json({
+            success: true,
+            instanceId,
+            groupId: groupJid,
+            applied,
+            group: serializeGroupMetadata(metadata, instance)
+        });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/groups/:instanceId/:groupId/leave', async (req, res) => {
+    const { instanceId, groupId } = req.params;
+
+    try {
+        const { instance, metadata, groupJid } = await getGroupMetadataFromCache(instanceId, groupId);
+        await instance.sock.groupLeave(groupJid);
+
+        ensureGroupCache(instance).delete(groupJid);
+        metadata.leftAt = new Date().toISOString();
+
+        res.json({
+            success: true,
+            instanceId,
+            groupId: groupJid,
+            message: 'Instância removida do grupo com sucesso'
+        });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/groups/:instanceId/:groupId/invite-code', async (req, res) => {
+    const { instanceId, groupId } = req.params;
+
+    try {
+        const { instance, metadata, groupJid } = await ensureAdminPrivileges(instanceId, groupId);
+        const code = await instance.sock.groupInviteCode(groupJid);
+
+        metadata.inviteCode = code;
+        metadata.lastSynced = Date.now();
+        ensureGroupCache(instance).set(groupJid, metadata);
+
+        res.json({
+            success: true,
+            instanceId,
+            groupId: groupJid,
+            code,
+            group: serializeGroupMetadata(metadata, instance)
+        });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/groups/:instanceId/:groupId/revoke-invite', async (req, res) => {
+    const { instanceId, groupId } = req.params;
+
+    try {
+        const { instance, metadata, groupJid } = await ensureAdminPrivileges(instanceId, groupId);
+        const newCode = await instance.sock.groupRevokeInvite(groupJid);
+
+        metadata.inviteCode = newCode;
+        metadata.lastSynced = Date.now();
+        ensureGroupCache(instance).set(groupJid, metadata);
+
+        res.json({
+            success: true,
+            instanceId,
+            groupId: groupJid,
+            code: newCode,
+            group: serializeGroupMetadata(metadata, instance)
+        });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        res.status(status).json({ success: false, error: error.message });
     }
 });
 
