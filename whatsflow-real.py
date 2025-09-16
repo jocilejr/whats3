@@ -77,7 +77,47 @@ MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxs
 MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "meu-bucket")
 MINIO_PUBLIC_URL = os.environ.get("MINIO_PUBLIC_URL")
 _MINIO_CLIENT = None
+_MINIO_ENDPOINT = None
+_MINIO_SECURE_DEFAULT = False
 Minio = None
+
+
+def ensure_minio_credentials_table() -> None:
+    """Ensure the table used to persist MinIO credentials exists."""
+
+    try:
+        with sqlite3.connect(DB_FILE, timeout=30) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS minio_credentials (
+                    access_key TEXT NOT NULL,
+                    secret_key TEXT NOT NULL,
+                    bucket TEXT NOT NULL,
+                    url TEXT NOT NULL
+                )
+                """
+            )
+    except sqlite3.Error as exc:
+        # Avoid crashing the entire service if the database is temporarily locked.
+        print(f"⚠️ Não foi possível garantir tabela de credenciais do MinIO: {exc}")
+
+
+def _fetch_minio_credentials_from_db() -> Optional[Dict[str, str]]:
+    """Load stored MinIO credentials if available."""
+
+    try:
+        ensure_minio_credentials_table()
+        with sqlite3.connect(DB_FILE, timeout=30) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                "SELECT access_key, secret_key, bucket, url FROM minio_credentials LIMIT 1"
+            )
+            row = cursor.fetchone()
+            if row:
+                return {key: row[key] for key in row.keys()}
+    except sqlite3.Error as exc:
+        print(f"⚠️ Não foi possível carregar credenciais do MinIO do banco: {exc}")
+    return None
 
 
 def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
@@ -92,10 +132,82 @@ def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
     return cleaned or "localhost:9000", secure
 
 
-_MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT = _parse_minio_endpoint(MINIO_ENDPOINT_RAW)
-_ENV_MINIO_SECURE = os.environ.get("MINIO_SECURE")
-if _ENV_MINIO_SECURE is not None:
-    _MINIO_SECURE_DEFAULT = _ENV_MINIO_SECURE.lower() in {"1", "true", "yes", "on"}
+def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
+    """Combine DB stored credentials with environment fallbacks."""
+
+    access_key = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
+    secret_key = os.environ.get(
+        "MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4"
+    )
+    bucket = os.environ.get("MINIO_BUCKET", "meu-bucket")
+    endpoint_raw = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+    public_url = os.environ.get("MINIO_PUBLIC_URL")
+
+    stored = _fetch_minio_credentials_from_db()
+    if stored:
+        endpoint_raw = stored.get("url") or endpoint_raw
+        access_key = stored.get("access_key") or access_key
+        secret_key = stored.get("secret_key") or secret_key
+        bucket = stored.get("bucket") or bucket
+        if not public_url:
+            public_url = stored.get("url") or public_url
+
+    return endpoint_raw, access_key, secret_key, bucket, public_url
+
+
+def reload_minio_settings_from_db() -> None:
+    """Refresh MinIO configuration using the persisted credentials."""
+
+    global MINIO_ENDPOINT_RAW, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET
+    global MINIO_PUBLIC_URL, _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT, _MINIO_CLIENT
+
+    (
+        MINIO_ENDPOINT_RAW,
+        MINIO_ACCESS_KEY,
+        MINIO_SECRET_KEY,
+        MINIO_BUCKET,
+        MINIO_PUBLIC_URL,
+    ) = _load_minio_configuration()
+
+    _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT = _parse_minio_endpoint(MINIO_ENDPOINT_RAW)
+    env_secure = os.environ.get("MINIO_SECURE")
+    if env_secure is not None:
+        _MINIO_SECURE_DEFAULT = env_secure.lower() in {"1", "true", "yes", "on"}
+
+    # Force recreation of the client with the new configuration on the next usage.
+    _MINIO_CLIENT = None
+
+
+def get_current_minio_settings() -> Dict[str, str]:
+    """Expose current MinIO settings for API responses."""
+
+    return {
+        "access_key": (MINIO_ACCESS_KEY or ""),
+        "secret_key": (MINIO_SECRET_KEY or ""),
+        "bucket": (MINIO_BUCKET or ""),
+        "url": (MINIO_ENDPOINT_RAW or ""),
+    }
+
+
+def save_minio_credentials(access_key: str, secret_key: str, bucket: str, url: str) -> None:
+    """Persist MinIO credentials and refresh in-memory configuration."""
+
+    ensure_minio_credentials_table()
+    with sqlite3.connect(DB_FILE, timeout=30) as conn:
+        conn.execute("DELETE FROM minio_credentials")
+        conn.execute(
+            """
+            INSERT INTO minio_credentials (access_key, secret_key, bucket, url)
+            VALUES (?, ?, ?, ?)
+            """,
+            (access_key, secret_key, bucket, url),
+        )
+        conn.commit()
+
+    reload_minio_settings_from_db()
+
+
+reload_minio_settings_from_db()
 
 
 def _get_minio_public_base() -> str:
@@ -8217,6 +8329,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_get_instances()
         elif self.path == '/api/stats':
             self.handle_get_stats()
+        elif self.path == '/api/settings/minio':
+            self.handle_get_minio_settings()
         elif self.path == '/api/messages':
             self.handle_get_messages()
         elif self.path == '/api/whatsapp/status':
@@ -8294,6 +8408,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_import_chats()
         elif self.path == '/api/upload':
             self.handle_upload_media()
+        elif self.path == '/api/settings/minio':
+            self.handle_update_minio_settings()
         elif self.path.startswith('/api/whatsapp/connect/'):
             instance_id = self.path.split('/')[-1]
             self.handle_connect_instance(instance_id)
@@ -8579,6 +8695,74 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Erro ao processar desconexão: {e}")
             self.send_json_response({"error": str(e)}, 500)
+
+    def handle_get_minio_settings(self):
+        try:
+            settings = get_current_minio_settings()
+            self.send_json_response(settings)
+        except Exception as exc:
+            logger.exception("Erro ao carregar configurações do MinIO")
+            self.send_json_response({"error": str(exc)}, 500)
+
+    def handle_update_minio_settings(self):
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+        except (TypeError, ValueError):
+            content_length = 0
+
+        raw_body = self.rfile.read(content_length) if content_length > 0 else b""
+        if not raw_body:
+            self.send_json_response({"error": "Corpo da requisição vazio."}, 400)
+            return
+
+        try:
+            data = json.loads(raw_body.decode('utf-8'))
+        except json.JSONDecodeError:
+            self.send_json_response({"error": "JSON inválido."}, 400)
+            return
+
+        if not isinstance(data, dict):
+            self.send_json_response({"error": "JSON inválido."}, 400)
+            return
+
+        required_fields = ("access_key", "secret_key", "bucket", "url")
+        cleaned: Dict[str, str] = {}
+        for field in required_fields:
+            value = data.get(field)
+            if not isinstance(value, str):
+                self.send_json_response({"error": f"Campo '{field}' é obrigatório."}, 400)
+                return
+            trimmed = value.strip()
+            if not trimmed:
+                self.send_json_response({"error": f"Campo '{field}' é obrigatório."}, 400)
+                return
+            cleaned[field] = trimmed
+
+        try:
+            save_minio_credentials(
+                cleaned["access_key"],
+                cleaned["secret_key"],
+                cleaned["bucket"],
+                cleaned["url"],
+            )
+        except sqlite3.Error as exc:
+            logger.exception("Erro ao salvar credenciais do MinIO")
+            self.send_json_response(
+                {"error": f"Erro ao salvar credenciais do MinIO: {exc}"}, 500
+            )
+            return
+        except Exception as exc:
+            logger.exception("Erro ao salvar credenciais do MinIO")
+            self.send_json_response({"error": str(exc)}, 500)
+            return
+
+        self.send_json_response(
+            {
+                "success": True,
+                "message": "Credenciais do MinIO atualizadas com sucesso.",
+                "settings": get_current_minio_settings(),
+            }
+        )
 
     def handle_upload_media(self):
         try:
