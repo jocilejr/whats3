@@ -6,6 +6,7 @@ import FlowList from './components/FlowList';
 import MessagesCenter from './components/MessagesCenter';
 import Settings from './components/Settings';
 import WhatsAppInstances from './components/WhatsAppInstances';
+import GroupsManager from './components/GroupsManager';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
@@ -47,14 +48,21 @@ const Navigation = ({ currentView, onViewChange }) => {
           <span className="nav-icon">🎯</span>
           <span>Fluxos</span>
         </button>
-        <button 
+        <button
           className={`nav-item ${currentView === 'contacts' ? 'active' : ''}`}
           onClick={() => onViewChange('contacts')}
         >
           <span className="nav-icon">👥</span>
           <span>Contatos</span>
         </button>
-        <button 
+        <button
+          className={`nav-item ${currentView === 'groups' ? 'active' : ''}`}
+          onClick={() => onViewChange('groups')}
+        >
+          <span className="nav-icon">🧑‍🤝‍🧑</span>
+          <span>Grupos</span>
+        </button>
+        <button
           className={`nav-item ${currentView === 'messages' ? 'active' : ''}`}
           onClick={() => onViewChange('messages')}
         >
@@ -437,6 +445,10 @@ function App() {
               <h2>👥 Gerenciamento de Contatos</h2>
               <ContactsList />
             </section>
+          )}
+
+          {currentView === 'groups' && (
+            <GroupsManager />
           )}
 
           {currentView === 'messages' && (
