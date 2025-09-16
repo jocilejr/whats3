@@ -71,7 +71,9 @@ DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
 
-MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+DEFAULT_MINIO_ENDPOINT = "https://minio.auto-atendimento.digital"
+
+MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT", DEFAULT_MINIO_ENDPOINT)
 MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4")
 MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "meu-bucket")
@@ -120,16 +122,30 @@ def _fetch_minio_credentials_from_db() -> Optional[Dict[str, str]]:
     return None
 
 
+def _compute_minio_host(endpoint: str) -> Tuple[str, bool]:
+    parsed = urllib.parse.urlparse(endpoint)
+    host = parsed.netloc or parsed.path
+    if not host:
+        host = "localhost:9000"
+    secure = parsed.scheme.lower() == "https"
+    return host, secure
+
+
+DEFAULT_MINIO_HOST, DEFAULT_MINIO_SECURE = _compute_minio_host(DEFAULT_MINIO_ENDPOINT)
+
+
 def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
     if not endpoint:
-        return "localhost:9000", False
+        return DEFAULT_MINIO_HOST, DEFAULT_MINIO_SECURE
     secure = False
     cleaned = endpoint
     if "://" in endpoint:
         parsed = urllib.parse.urlparse(endpoint)
         secure = parsed.scheme.lower() == "https"
         cleaned = parsed.netloc or parsed.path
-    return cleaned or "localhost:9000", secure
+    if not cleaned:
+        return DEFAULT_MINIO_HOST, secure or DEFAULT_MINIO_SECURE
+    return cleaned, secure
 
 
 def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
@@ -140,7 +156,7 @@ def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
         "MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4"
     )
     bucket = os.environ.get("MINIO_BUCKET", "meu-bucket")
-    endpoint_raw = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+    endpoint_raw = os.environ.get("MINIO_ENDPOINT", DEFAULT_MINIO_ENDPOINT)
     public_url = os.environ.get("MINIO_PUBLIC_URL")
 
     stored = _fetch_minio_credentials_from_db()
