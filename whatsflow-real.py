@@ -81,6 +81,7 @@ MINIO_PUBLIC_URL = os.environ.get("MINIO_PUBLIC_URL")
 _MINIO_CLIENT = None
 _MINIO_ENDPOINT = None
 _MINIO_SECURE_DEFAULT = False
+_MINIO_BUCKET_POLICY_APPLIED = False
 Minio = None
 
 
@@ -235,6 +236,24 @@ def _get_minio_public_base() -> str:
     return f"{scheme}://{_MINIO_ENDPOINT}"
 
 
+def _build_minio_object_url(client, object_name: str) -> str:
+    if MINIO_PUBLIC_URL:
+        base = MINIO_PUBLIC_URL.rstrip("/")
+        return f"{base}/{MINIO_BUCKET}/{object_name}"
+
+    try:
+        return client.presigned_get_object(
+            MINIO_BUCKET,
+            object_name,
+            expires=timedelta(days=7),
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Falha ao gerar URL assinada para objeto '%s': %s", object_name, exc
+        )
+        return f"{_get_minio_public_base()}/{MINIO_BUCKET}/{object_name}"
+
+
 def update_minio_runtime_configuration(
     *,
     endpoint: Optional[str] = None,
@@ -379,14 +398,39 @@ API_BASE_URL = resolve_baileys_url()
 
 
 def ensure_minio_bucket(client=None):
+    global _MINIO_BUCKET_POLICY_APPLIED
     client = client or get_minio_client()
     try:
-        if not client.bucket_exists(MINIO_BUCKET):
+        bucket_exists = client.bucket_exists(MINIO_BUCKET)
+        if not bucket_exists:
             client.make_bucket(MINIO_BUCKET)
     except Exception as exc:
         raise RuntimeError(
             f"Não foi possível preparar o bucket '{MINIO_BUCKET}' no MinIO: {exc}"
         ) from exc
+
+    if MINIO_PUBLIC_URL and not _MINIO_BUCKET_POLICY_APPLIED:
+        policy_document = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{MINIO_BUCKET}/*"],
+                }
+            ],
+        }
+        try:
+            client.set_bucket_policy(MINIO_BUCKET, json.dumps(policy_document))
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "Não foi possível aplicar política pública ao bucket '%s': %s",
+                MINIO_BUCKET,
+                exc,
+            )
+        finally:
+            _MINIO_BUCKET_POLICY_APPLIED = True
     return client
 
 
@@ -399,7 +443,7 @@ def upload_to_minio(filename: str, data: bytes) -> str:
         client.put_object(MINIO_BUCKET, object_name, data_stream, len(data))
     except Exception as exc:
         raise RuntimeError(f"Falha ao enviar arquivo para o MinIO: {exc}") from exc
-    return f"{_get_minio_public_base()}/{MINIO_BUCKET}/{object_name}"
+    return _build_minio_object_url(client, object_name)
 
 # WebSocket clients management
 if WEBSOCKETS_AVAILABLE:
