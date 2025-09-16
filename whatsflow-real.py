@@ -3634,8 +3634,13 @@ HTML_APP = '''<!DOCTYPE html>
                 <select id="scheduleMessageType" class="form-input" onchange="handleMessageTypeChange()">
                     <option value="text">📝 Texto</option>
                     <option value="image">🖼️ Imagem</option>
-                    <option value="audio">🎵 Áudio</option>
                     <option value="video">🎥 Vídeo</option>
+                    <option value="audio">🎵 Áudio</option>
+                    <option value="document">📄 Documento</option>
+                    <option value="sticker">🎞️ Figurinha</option>
+                    <option value="location">📍 Localização</option>
+                    <option value="contact">👤 Contato</option>
+                    <option value="poll">🗳️ Enquete</option>
                 </select>
             </div>
             
@@ -3662,15 +3667,113 @@ HTML_APP = '''<!DOCTYPE html>
                     </span>
                 </div>
                 <p id="scheduleMediaUploadStatus" style="margin-top: 6px; font-size: 0.85rem; color: #64748b;"></p>
-                <div id="mediaPreview" style="margin-top: 15px; display: none;">
-                    <!-- Media preview will appear here -->
-                </div>
                 <div style="margin-top: 10px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Legenda/Texto (opcional):</label>
-                    <textarea id="scheduleMediaCaption" class="form-input" 
-                              placeholder="Adicione uma legenda ou texto..." 
+                    <textarea id="scheduleMediaCaption" class="form-input"
+                              placeholder="Adicione uma legenda ou texto..."
                               style="height: 60px; resize: vertical;"></textarea>
                 </div>
+            </div>
+
+            <div id="locationMessageDiv" style="margin: 20px 0; display: none;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 500;">Dados da Localização:</label>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Latitude *</label>
+                        <input type="number" id="scheduleLocationLatitude" class="form-input" step="any"
+                               placeholder="Ex: -23.5505" oninput="updateSchedulePreview()">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Longitude *</label>
+                        <input type="number" id="scheduleLocationLongitude" class="form-input" step="any"
+                               placeholder="Ex: -46.6333" oninput="updateSchedulePreview()">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nome/Local (opcional)</label>
+                        <input type="text" id="scheduleLocationName" class="form-input" placeholder="Ex: Escritório"
+                               oninput="updateSchedulePreview()">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Endereço (opcional)</label>
+                        <input type="text" id="scheduleLocationAddress" class="form-input" placeholder="Endereço completo"
+                               oninput="updateSchedulePreview()">
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Mensagem adicional (opcional)</label>
+                    <textarea id="scheduleLocationMessage" class="form-input" placeholder="Texto a ser enviado junto"
+                              style="height: 60px; resize: vertical;" oninput="updateSchedulePreview()"></textarea>
+                </div>
+            </div>
+
+            <div id="contactMessageDiv" style="margin: 20px 0; display: none;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 500;">Dados do Contato:</label>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nome *</label>
+                        <input type="text" id="scheduleContactName" class="form-input" placeholder="Nome completo"
+                               oninput="updateSchedulePreview()">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Telefone *</label>
+                        <input type="text" id="scheduleContactPhone" class="form-input" placeholder="+55..."
+                               oninput="updateSchedulePreview()">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Empresa (opcional)</label>
+                        <input type="text" id="scheduleContactOrganization" class="form-input" placeholder="Empresa"
+                               oninput="updateSchedulePreview()">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">E-mail (opcional)</label>
+                        <input type="email" id="scheduleContactEmail" class="form-input" placeholder="email@exemplo.com"
+                               oninput="updateSchedulePreview()">
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Mensagem adicional (opcional)</label>
+                    <textarea id="scheduleContactMessage" class="form-input" placeholder="Texto a ser enviado junto"
+                              style="height: 60px; resize: vertical;" oninput="updateSchedulePreview()"></textarea>
+                </div>
+            </div>
+
+            <div id="pollMessageDiv" style="margin: 20px 0; display: none;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 500;">Configuração da Enquete:</label>
+                <div style="margin-bottom: 10px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Pergunta *</label>
+                    <input type="text" id="schedulePollQuestion" class="form-input" placeholder="Pergunta da enquete"
+                           oninput="updateSchedulePreview()">
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Opções (uma por linha) *</label>
+                    <textarea id="schedulePollOptions" class="form-input" placeholder="Opção 1\nOpção 2\nOpção 3"
+                              style="height: 80px; resize: vertical;" oninput="updateSchedulePreview()"></textarea>
+                </div>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="schedulePollAllowMultiple" onchange="updateSchedulePreview()">
+                        Permitir múltiplas respostas
+                    </label>
+                    <div style="flex: 1; min-width: 180px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Máx. seleções (opcional)</label>
+                        <input type="number" id="schedulePollMaxSelections" class="form-input" min="1"
+                               placeholder="Ex: 2" oninput="updateSchedulePreview()">
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Mensagem adicional (opcional)</label>
+                    <textarea id="schedulePollMessage" class="form-input" placeholder="Texto a ser enviado junto"
+                              style="height: 60px; resize: vertical;" oninput="updateSchedulePreview()"></textarea>
+                </div>
+            </div>
+
+            <div id="schedulePreviewContainer" style="margin: 20px 0; display: none;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Pré-visualização:</label>
+                <div id="mediaPreview" style="padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;"></div>
             </div>
             
             <div style="margin: 20px 0;">
@@ -5023,7 +5126,7 @@ HTML_APP = '''<!DOCTYPE html>
                     targetInput.value = data.url;
                     targetInput.dispatchEvent(new Event('change', { bubbles: true }));
                     if (targetFieldId === 'scheduleMediaUrl') {
-                        previewMedia();
+                        updateSchedulePreview();
                     }
                 }
 
@@ -6433,6 +6536,7 @@ HTML_APP = '''<!DOCTYPE html>
         
         let selectedScheduleGroups = [];
         let availableScheduleGroups = [];
+        window.currentScheduleMessageType = 'text';
         
         // Show schedule message modal
         function showScheduleMessageModal() {
@@ -6606,37 +6710,130 @@ HTML_APP = '''<!DOCTYPE html>
             }
         }
         
+        // Structured message helpers
+        function resetStructuredInputs(type = null) {
+            const fieldMap = {
+                location: [
+                    'scheduleLocationLatitude',
+                    'scheduleLocationLongitude',
+                    'scheduleLocationName',
+                    'scheduleLocationAddress',
+                    'scheduleLocationMessage'
+                ],
+                contact: [
+                    'scheduleContactName',
+                    'scheduleContactPhone',
+                    'scheduleContactOrganization',
+                    'scheduleContactEmail',
+                    'scheduleContactMessage'
+                ],
+                poll: [
+                    'schedulePollQuestion',
+                    'schedulePollOptions',
+                    'schedulePollMaxSelections',
+                    'schedulePollMessage'
+                ]
+            };
+            const checkboxMap = {
+                poll: ['schedulePollAllowMultiple']
+            };
+
+            const typesToReset = type ? [type] : Object.keys(fieldMap);
+            typesToReset.forEach(entryType => {
+                const fields = fieldMap[entryType] || [];
+                fields.forEach(fieldId => {
+                    const element = document.getElementById(fieldId);
+                    if (!element) return;
+                    element.value = '';
+                });
+
+                const checkboxes = checkboxMap[entryType] || [];
+                checkboxes.forEach(fieldId => {
+                    const checkbox = document.getElementById(fieldId);
+                    if (checkbox) checkbox.checked = false;
+                });
+            });
+        }
+
         // Handle message type change
         function handleMessageTypeChange() {
             const messageType = document.getElementById('scheduleMessageType').value;
+            const previousType = window.currentScheduleMessageType || 'text';
+
             const textDiv = document.getElementById('textMessageDiv');
             const mediaDiv = document.getElementById('mediaMessageDiv');
-            const mediaPreview = document.getElementById('mediaPreview');
+            const locationDiv = document.getElementById('locationMessageDiv');
+            const contactDiv = document.getElementById('contactMessageDiv');
+            const pollDiv = document.getElementById('pollMessageDiv');
+            const previewContainer = document.getElementById('schedulePreviewContainer');
             const uploadStatus = document.getElementById('scheduleMediaUploadStatus');
             const mediaUrlInput = document.getElementById('scheduleMediaUrl');
+            const fileInput = document.getElementById('scheduleMediaFile');
+            const captionInput = document.getElementById('scheduleMediaCaption');
 
-            if (messageType === 'text') {
-                textDiv.style.display = 'block';
-                mediaDiv.style.display = 'none';
-                mediaPreview.style.display = 'none';
-                mediaPreview.innerHTML = '';
+            const mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
+            const structuredTypes = ['location', 'contact', 'poll'];
+
+            // Reset visibility
+            textDiv.style.display = 'none';
+            mediaDiv.style.display = 'none';
+            locationDiv.style.display = 'none';
+            contactDiv.style.display = 'none';
+            pollDiv.style.display = 'none';
+
+            // Reset structured inputs when leaving that type
+            if (structuredTypes.includes(previousType) && previousType !== messageType) {
+                resetStructuredInputs(previousType);
+            }
+
+            if (messageType !== previousType) {
                 if (mediaUrlInput) {
                     mediaUrlInput.value = '';
+                }
+                if (fileInput) {
+                    fileInput.value = '';
+                }
+                if (captionInput) {
+                    captionInput.value = '';
                 }
                 if (uploadStatus) {
                     uploadStatus.textContent = '';
                     uploadStatus.style.color = '#64748b';
                 }
-            } else {
-                textDiv.style.display = 'none';
-                mediaDiv.style.display = 'block';
-                if (mediaUrlInput && mediaUrlInput.value) {
-                    previewMedia();
-                } else {
-                    mediaPreview.style.display = 'none';
-                    mediaPreview.innerHTML = '';
-                }
             }
+
+            if (messageType === 'text') {
+                textDiv.style.display = 'block';
+            } else if (mediaTypes.includes(messageType)) {
+                mediaDiv.style.display = 'block';
+                if (fileInput) {
+                    const acceptMap = {
+                        image: 'image/*',
+                        video: 'video/*',
+                        audio: 'audio/*',
+                        document: '*/*',
+                        sticker: 'image/webp,image/*'
+                    };
+                    fileInput.accept = acceptMap[messageType] || '*/*';
+                }
+            } else if (messageType === 'location') {
+                locationDiv.style.display = 'block';
+            } else if (messageType === 'contact') {
+                contactDiv.style.display = 'block';
+            } else if (messageType === 'poll') {
+                pollDiv.style.display = 'block';
+            }
+
+            if (previewContainer) {
+                previewContainer.style.display = 'none';
+            }
+            const previewElement = document.getElementById('mediaPreview');
+            if (previewElement) {
+                previewElement.innerHTML = '';
+            }
+
+            window.currentScheduleMessageType = messageType;
+            updateSchedulePreview();
         }
         
         // Handle schedule type change
@@ -6654,53 +6851,148 @@ HTML_APP = '''<!DOCTYPE html>
             }
         }
         
-        // Preview media
-        function previewMedia() {
-            const url = document.getElementById('scheduleMediaUrl').value;
-            const preview = document.getElementById('mediaPreview');
+        // Preview for schedule message types
+        function updateSchedulePreview() {
             const messageType = document.getElementById('scheduleMessageType').value;
-            
-            if (!url) {
-                preview.style.display = 'none';
+            const previewContainer = document.getElementById('schedulePreviewContainer');
+            const preview = document.getElementById('mediaPreview');
+
+            if (!previewContainer || !preview) {
                 return;
             }
-            
+
+            const mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
             let previewHtml = '';
-            
-            if (messageType === 'image') {
+
+            if (messageType === 'text') {
+                previewContainer.style.display = 'none';
+                preview.innerHTML = '';
+                return;
+            }
+
+            if (mediaTypes.includes(messageType)) {
+                const url = (document.getElementById('scheduleMediaUrl').value || '').trim();
+                if (!url) {
+                    previewContainer.style.display = 'none';
+                    preview.innerHTML = '';
+                    return;
+                }
+
+                if (messageType === 'image' || messageType === 'sticker') {
+                    const maxHeight = messageType === 'sticker' ? 160 : 220;
+                    previewHtml = `
+                        <div style="text-align: center;">
+                            <img src="${url}" alt="Pré-visualização" style="max-width: 100%; max-height: ${maxHeight}px; border-radius: 6px;"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar a imagem</div>
+                        </div>
+                    `;
+                } else if (messageType === 'video') {
+                    previewHtml = `
+                        <div style="text-align: center;">
+                            <video controls style="max-width: 100%; max-height: 220px; border-radius: 6px;"
+                                   onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                <source src="${url}">
+                                Seu navegador não suporta vídeos.
+                            </video>
+                            <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o vídeo</div>
+                        </div>
+                    `;
+                } else if (messageType === 'audio') {
+                    previewHtml = `
+                        <div style="text-align: center;">
+                            <audio controls style="width: 100%;"
+                                   onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                <source src="${url}">
+                                Seu navegador não suporta áudio.
+                            </audio>
+                            <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o áudio</div>
+                        </div>
+                    `;
+                } else if (messageType === 'document') {
+                    previewHtml = `
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="font-size: 2rem;">📄</div>
+                            <div>
+                                <div style="font-weight: 600;">Documento selecionado</div>
+                                <div style="font-size: 0.85rem; color: #475569; word-break: break-all;">${url}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } else if (messageType === 'location') {
+                const latitude = (document.getElementById('scheduleLocationLatitude').value || '').trim();
+                const longitude = (document.getElementById('scheduleLocationLongitude').value || '').trim();
+                const name = (document.getElementById('scheduleLocationName').value || '').trim();
+                const address = (document.getElementById('scheduleLocationAddress').value || '').trim();
+
+                if (!latitude || !longitude) {
+                    previewContainer.style.display = 'none';
+                    preview.innerHTML = '';
+                    return;
+                }
+
                 previewHtml = `
-                    <div style="text-align: center;">
-                        <img src="${url}" alt="Preview" style="max-width: 100%; max-height: 200px; border-radius: 6px;"
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                        <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar a imagem</div>
+                    <div>
+                        <div style="font-weight: 600; margin-bottom: 4px;">📍 Localização selecionada</div>
+                        <div style="color: #334155;">Lat: ${latitude} • Long: ${longitude}</div>
+                        ${name ? `<div style=\"margin-top: 6px;\"><strong>Local:</strong> ${name}</div>` : ''}
+                        ${address ? `<div style=\"margin-top: 4px;\"><strong>Endereço:</strong> ${address}</div>` : ''}
                     </div>
                 `;
-            } else if (messageType === 'video') {
+            } else if (messageType === 'contact') {
+                const name = (document.getElementById('scheduleContactName').value || '').trim();
+                const phone = (document.getElementById('scheduleContactPhone').value || '').trim();
+                const organization = (document.getElementById('scheduleContactOrganization').value || '').trim();
+                const email = (document.getElementById('scheduleContactEmail').value || '').trim();
+
+                if (!name || !phone) {
+                    previewContainer.style.display = 'none';
+                    preview.innerHTML = '';
+                    return;
+                }
+
                 previewHtml = `
-                    <div style="text-align: center;">
-                        <video controls style="max-width: 100%; max-height: 200px; border-radius: 6px;"
-                               onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                            <source src="${url}">
-                            Seu navegador não suporta vídeos.
-                        </video>
-                        <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o vídeo</div>
+                    <div>
+                        <div style="font-weight: 600;">👤 ${name}</div>
+                        <div style="color: #334155;">${phone}</div>
+                        ${organization ? `<div style=\"margin-top: 4px;\">🏢 ${organization}</div>` : ''}
+                        ${email ? `<div style=\"margin-top: 4px;\">✉️ ${email}</div>` : ''}
                     </div>
                 `;
-            } else if (messageType === 'audio') {
+            } else if (messageType === 'poll') {
+                const question = (document.getElementById('schedulePollQuestion').value || '').trim();
+                const optionsRaw = document.getElementById('schedulePollOptions').value || '';
+                const allowMultiple = document.getElementById('schedulePollAllowMultiple').checked;
+                const maxSelections = (document.getElementById('schedulePollMaxSelections').value || '').trim();
+
+                const options = optionsRaw.split('\n').map(option => option.trim()).filter(option => option.length > 0);
+                if (!question || options.length < 2) {
+                    previewContainer.style.display = 'none';
+                    preview.innerHTML = '';
+                    return;
+                }
+
+                const optionsHtml = options.map(option => `<li>${option}</li>`).join('');
                 previewHtml = `
-                    <div style="text-align: center;">
-                        <audio controls style="width: 100%;"
-                               onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                            <source src="${url}">
-                            Seu navegador não suporta áudio.
-                        </audio>
-                        <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o áudio</div>
+                    <div>
+                        <div style="font-weight: 600;">🗳️ ${question}</div>
+                        <ul style="margin: 8px 0 0 16px; color: #1e293b;">${optionsHtml}</ul>
+                        <div style="margin-top: 8px; font-size: 0.9rem; color: #475569;">
+                            ${allowMultiple ? '✔️ Múltiplas respostas permitidas' : '❌ Apenas uma resposta'}
+                            ${allowMultiple && maxSelections ? ` • Máx: ${maxSelections}` : ''}
+                        </div>
                     </div>
                 `;
             }
-            
-            preview.innerHTML = previewHtml;
-            preview.style.display = 'block';
+
+            if (previewHtml) {
+                preview.innerHTML = previewHtml;
+                previewContainer.style.display = 'block';
+            } else {
+                preview.innerHTML = '';
+                previewContainer.style.display = 'none';
+            }
         }
         
         // Reset schedule form
@@ -6709,6 +7001,7 @@ HTML_APP = '''<!DOCTYPE html>
             document.getElementById('scheduleMessageContent').value = '';
             document.getElementById('scheduleMediaUrl').value = '';
             document.getElementById('scheduleMediaCaption').value = '';
+            resetStructuredInputs();
             const uploadStatus = document.getElementById('scheduleMediaUploadStatus');
             if (uploadStatus) {
                 uploadStatus.textContent = '';
@@ -6718,10 +7011,13 @@ HTML_APP = '''<!DOCTYPE html>
             if (scheduleFileInput) {
                 scheduleFileInput.value = '';
             }
+            const previewContainer = document.getElementById('schedulePreviewContainer');
             const mediaPreview = document.getElementById('mediaPreview');
             if (mediaPreview) {
                 mediaPreview.innerHTML = '';
-                mediaPreview.style.display = 'none';
+            }
+            if (previewContainer) {
+                previewContainer.style.display = 'none';
             }
             document.getElementById('scheduleTypeSelect').value = 'once';
             document.getElementById('scheduleTimeInput').value = '';
@@ -6730,11 +7026,13 @@ HTML_APP = '''<!DOCTYPE html>
             // Uncheck all weekday checkboxes
             const checkboxes = document.querySelectorAll('input[name="scheduleWeekDays"]');
             checkboxes.forEach(cb => cb.checked = false);
-            
+
             // Reset displays
+            window.currentScheduleMessageType = 'text';
             handleMessageTypeChange();
             handleGroupScheduleTypeChange();
-            
+            updateSchedulePreview();
+
             // Clear group selections
             selectedScheduleGroups = [];
             updateSelectedScheduleGroupsDisplay();
@@ -6781,17 +7079,18 @@ HTML_APP = '''<!DOCTYPE html>
                 
                 let messageContent = '';
                 let mediaUrl = '';
-                
+                const mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
+
                 if (messageType === 'text') {
                     messageContent = document.getElementById('scheduleMessageContent').value.trim();
                     if (!messageContent) {
                         alert('❌ Digite a mensagem de texto');
                         return;
                     }
-                } else {
-                    mediaUrl = document.getElementById('scheduleMediaUrl').value.trim();
+                } else if (mediaTypes.includes(messageType)) {
+                    const mediaUrlValue = document.getElementById('scheduleMediaUrl').value.trim();
                     messageContent = document.getElementById('scheduleMediaCaption').value.trim();
-                    if (!mediaUrl) {
+                    if (!mediaUrlValue) {
                         const statusElement = document.getElementById('scheduleMediaUploadStatus');
                         if (statusElement) {
                             statusElement.style.color = '#dc2626';
@@ -6800,6 +7099,98 @@ HTML_APP = '''<!DOCTYPE html>
                         alert('❌ Envie um arquivo de mídia antes de agendar.');
                         return;
                     }
+                    mediaUrl = mediaUrlValue;
+                } else if (messageType === 'location') {
+                    const latitudeValue = parseFloat((document.getElementById('scheduleLocationLatitude').value || '').trim());
+                    const longitudeValue = parseFloat((document.getElementById('scheduleLocationLongitude').value || '').trim());
+                    const locationName = (document.getElementById('scheduleLocationName').value || '').trim();
+                    const locationAddress = (document.getElementById('scheduleLocationAddress').value || '').trim();
+
+                    if (Number.isNaN(latitudeValue) || Number.isNaN(longitudeValue)) {
+                        alert('❌ Informe uma latitude e longitude válidas');
+                        return;
+                    }
+
+                    const locationData = {
+                        latitude: latitudeValue,
+                        longitude: longitudeValue
+                    };
+                    if (locationName) {
+                        locationData.name = locationName;
+                    }
+                    if (locationAddress) {
+                        locationData.address = locationAddress;
+                    }
+
+                    mediaUrl = JSON.stringify(locationData);
+                    messageContent = (document.getElementById('scheduleLocationMessage').value || '').trim();
+                } else if (messageType === 'contact') {
+                    const contactName = (document.getElementById('scheduleContactName').value || '').trim();
+                    const contactPhone = (document.getElementById('scheduleContactPhone').value || '').trim();
+                    const contactOrganization = (document.getElementById('scheduleContactOrganization').value || '').trim();
+                    const contactEmail = (document.getElementById('scheduleContactEmail').value || '').trim();
+
+                    if (!contactName || !contactPhone) {
+                        alert('❌ Informe nome e telefone do contato');
+                        return;
+                    }
+
+                    const contactData = {
+                        name: contactName,
+                        phone: contactPhone
+                    };
+                    if (contactOrganization) {
+                        contactData.organization = contactOrganization;
+                    }
+                    if (contactEmail) {
+                        contactData.email = contactEmail;
+                    }
+
+                    mediaUrl = JSON.stringify(contactData);
+                    messageContent = (document.getElementById('scheduleContactMessage').value || '').trim();
+                } else if (messageType === 'poll') {
+                    const pollQuestion = (document.getElementById('schedulePollQuestion').value || '').trim();
+                    const pollOptionsRaw = document.getElementById('schedulePollOptions').value || '';
+                    const allowMultiple = document.getElementById('schedulePollAllowMultiple').checked;
+                    const pollMaxSelectionsRaw = (document.getElementById('schedulePollMaxSelections').value || '').trim();
+
+                    const pollOptions = pollOptionsRaw
+                        .split('\n')
+                        .map(option => option.trim())
+                        .filter(option => option.length > 0);
+
+                    if (!pollQuestion) {
+                        alert('❌ Informe a pergunta da enquete');
+                        return;
+                    }
+
+                    if (pollOptions.length < 2) {
+                        alert('❌ Adicione pelo menos duas opções para a enquete');
+                        return;
+                    }
+
+                    let maxSelections = null;
+                    if (allowMultiple && pollMaxSelectionsRaw) {
+                        const parsedMax = parseInt(pollMaxSelectionsRaw, 10);
+                        if (Number.isNaN(parsedMax) || parsedMax < 1) {
+                            alert('❌ Máximo de seleções inválido');
+                            return;
+                        }
+                        maxSelections = Math.min(parsedMax, pollOptions.length);
+                    }
+
+                    const pollData = {
+                        question: pollQuestion,
+                        options: pollOptions,
+                        allowMultiple: allowMultiple,
+                        maxSelections: allowMultiple ? (maxSelections || pollOptions.length) : 1
+                    };
+
+                    mediaUrl = JSON.stringify(pollData);
+                    messageContent = (document.getElementById('schedulePollMessage').value || '').trim();
+                } else {
+                    alert('❌ Tipo de mensagem não suportado');
+                    return;
                 }
                 
                 let scheduleDate = '';
@@ -8764,13 +9155,17 @@ class MessageScheduler:
                 print(f"❌ {error_msg}")
                 return False, error_msg
 
+            payload: Dict[str, Any]
             if message_type == 'text':
                 payload = {
                     'to': group_id,
                     'type': 'text',
                     'message': message_text or ''
                 }
-            else:
+            elif message_type in {'image', 'video', 'audio', 'document', 'sticker'}:
+                if not media_url:
+                    return False, 'URL de mídia ausente'
+
                 payload = {
                     'to': group_id,
                     'type': message_type,
@@ -8778,6 +9173,65 @@ class MessageScheduler:
                 }
                 if message_text:
                     payload['message'] = message_text
+            elif message_type == 'location':
+                try:
+                    location_data = json.loads(media_url or '{}')
+                except json.JSONDecodeError:
+                    return False, 'Dados de localização inválidos'
+
+                if not isinstance(location_data, dict):
+                    return False, 'Dados de localização inválidos'
+
+                if 'latitude' not in location_data or 'longitude' not in location_data:
+                    return False, 'Latitude e longitude são obrigatórias'
+
+                payload = {
+                    'to': group_id,
+                    'type': 'location',
+                    'location': location_data
+                }
+                if message_text:
+                    payload['message'] = message_text
+            elif message_type == 'contact':
+                try:
+                    contact_data = json.loads(media_url or '{}')
+                except json.JSONDecodeError:
+                    return False, 'Dados de contato inválidos'
+
+                if not isinstance(contact_data, dict):
+                    return False, 'Dados de contato inválidos'
+
+                if not contact_data.get('name') or not contact_data.get('phone'):
+                    return False, 'Nome e telefone do contato são obrigatórios'
+
+                payload = {
+                    'to': group_id,
+                    'type': 'contact',
+                    'contact': contact_data
+                }
+                if message_text:
+                    payload['message'] = message_text
+            elif message_type == 'poll':
+                try:
+                    poll_data = json.loads(media_url or '{}')
+                except json.JSONDecodeError:
+                    return False, 'Dados da enquete inválidos'
+
+                if not isinstance(poll_data, dict):
+                    return False, 'Dados da enquete inválidos'
+
+                if not poll_data.get('question') or not poll_data.get('options'):
+                    return False, 'Pergunta e opções são obrigatórias na enquete'
+
+                payload = {
+                    'to': group_id,
+                    'type': 'poll',
+                    'poll': poll_data
+                }
+                if message_text:
+                    payload['message'] = message_text
+            else:
+                return False, f'Tipo de mensagem não suportado: {message_type}'
 
             for attempt in range(3):
                 try:

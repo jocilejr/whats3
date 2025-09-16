@@ -402,7 +402,7 @@ app.post('/connect/:instanceId', (req, res) => {
 app.post('/disconnect/:instanceId', (req, res) => {
     const { instanceId } = req.params;
     const instance = instances.get(instanceId);
-    
+
     if (instance && instance.sock) {
         try {
             instance.sock.logout();
@@ -417,9 +417,102 @@ app.post('/disconnect/:instanceId', (req, res) => {
     }
 });
 
+const deriveDocumentFileName = (input, fallback = 'document') => {
+    if (!input || typeof input !== 'string') {
+        return fallback;
+    }
+
+    try {
+        const parsed = new URL(input);
+        if (parsed.pathname) {
+            const segments = parsed.pathname.split('/').filter(Boolean);
+            if (segments.length > 0) {
+                return segments.pop();
+            }
+        }
+    } catch (err) {
+        // Ignore URL parsing errors and fallback to manual extraction
+    }
+
+    const sanitized = input.split('?')[0];
+    const parts = sanitized.split('/').filter(Boolean);
+    if (parts.length > 0) {
+        return parts.pop();
+    }
+
+    return fallback;
+};
+
+const sanitizePhoneNumber = (phone) => {
+    if (!phone) {
+        return '';
+    }
+    return String(phone).replace(/\D/g, '');
+};
+
+const buildVCard = (contactData) => {
+    const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
+    lines.push(`FN:${contactData.name}`);
+
+    if (contactData.organization) {
+        lines.push(`ORG:${contactData.organization}`);
+    }
+
+    const phoneDigits = sanitizePhoneNumber(contactData.phone);
+    const formattedPhone = contactData.phone || phoneDigits;
+    if (phoneDigits) {
+        lines.push(`TEL;type=CELL;type=VOICE;waid=${phoneDigits}:${formattedPhone}`);
+    } else if (formattedPhone) {
+        lines.push(`TEL;type=CELL;type=VOICE:${formattedPhone}`);
+    }
+
+    if (contactData.email) {
+        lines.push(`EMAIL;type=INTERNET:${contactData.email}`);
+    }
+
+    lines.push('END:VCARD');
+    return lines.join('\n');
+};
+
+const parseStructuredData = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    if (typeof value === 'object') {
+        return value;
+    }
+
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        } catch (err) {
+            return null;
+        }
+    }
+
+    return null;
+};
+
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    const { to, message, type = 'text', imageData, mediaUrl, fileName } = req.body;
+    const {
+        to,
+        message,
+        type = 'text',
+        imageData,
+        mediaData,
+        mediaUrl,
+        fileName,
+        mimetype,
+        location,
+        contact,
+        poll
+    } = req.body;
+
+    if (!to) {
+        return res.status(400).json({ error: 'Destinatário inválido' });
+    }
 
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
@@ -428,32 +521,140 @@ app.post('/send/:instanceId', async (req, res) => {
 
     try {
         const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
-        const caption = message || '';
-        const mediaTypes = ['image', 'video', 'audio', 'document'];
+        const normalizedType = String(type || 'text').toLowerCase();
+        const mediaTypes = new Set(['image', 'video', 'audio', 'document', 'sticker']);
+        const base64Data = imageData || mediaData || null;
 
-        if (type === 'text') {
+        const sendFollowUpText = async (text) => {
+            if (text) {
+                await instance.sock.sendMessage(jid, { text });
+            }
+        };
+
+        if (normalizedType === 'text') {
+            if (!message) {
+                return res.status(400).json({ error: 'Mensagem de texto vazia' });
+            }
             await instance.sock.sendMessage(jid, { text: message });
-        } else if (mediaTypes.includes(type)) {
-            if (!imageData && !mediaUrl) {
+        } else if (mediaTypes.has(normalizedType)) {
+            if (!base64Data && !mediaUrl) {
                 return res.status(400).json({ error: 'Missing media data' });
             }
 
-            if (type === 'image' && imageData) {
-                // Handle image sending (base64)
-                const buffer = Buffer.from(imageData, 'base64');
-                await instance.sock.sendMessage(jid, { image: buffer, caption });
-            } else {
-                const msg = { [type]: { url: mediaUrl }, caption };
-                if (type === 'document' && fileName) {
-                    msg.fileName = fileName;
+            let payload = {};
+
+            if (normalizedType === 'image') {
+                payload = base64Data
+                    ? { image: Buffer.from(base64Data, 'base64') }
+                    : { image: { url: mediaUrl } };
+                if (message) {
+                    payload.caption = message;
                 }
-                await instance.sock.sendMessage(jid, msg);
+            } else if (normalizedType === 'video') {
+                payload = base64Data
+                    ? { video: Buffer.from(base64Data, 'base64') }
+                    : { video: { url: mediaUrl } };
+                if (message) {
+                    payload.caption = message;
+                }
+            } else if (normalizedType === 'audio') {
+                payload = base64Data
+                    ? { audio: Buffer.from(base64Data, 'base64'), mimetype: mimetype || 'audio/mpeg' }
+                    : { audio: { url: mediaUrl }, mimetype: mimetype || 'audio/mpeg' };
+            } else if (normalizedType === 'document') {
+                payload = base64Data
+                    ? { document: Buffer.from(base64Data, 'base64') }
+                    : { document: { url: mediaUrl } };
+                payload.fileName = fileName || deriveDocumentFileName(mediaUrl);
+                if (mimetype) {
+                    payload.mimetype = mimetype;
+                }
+                if (message) {
+                    payload.caption = message;
+                }
+            } else if (normalizedType === 'sticker') {
+                payload = base64Data
+                    ? { sticker: Buffer.from(base64Data, 'base64') }
+                    : { sticker: { url: mediaUrl } };
             }
+
+            await instance.sock.sendMessage(jid, payload);
+
+            if (message && (normalizedType === 'audio' || normalizedType === 'sticker')) {
+                await sendFollowUpText(message);
+            }
+        } else if (normalizedType === 'location') {
+            const locationData = parseStructuredData(location) || parseStructuredData(mediaUrl);
+            if (!locationData || typeof locationData.latitude === 'undefined' || typeof locationData.longitude === 'undefined') {
+                return res.status(400).json({ error: 'Dados de localização inválidos' });
+            }
+
+            const latitude = Number(locationData.latitude);
+            const longitude = Number(locationData.longitude);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+                return res.status(400).json({ error: 'Latitude ou longitude inválidas' });
+            }
+
+            const locationPayload = {
+                degreesLatitude: latitude,
+                degreesLongitude: longitude
+            };
+            if (locationData.name) {
+                locationPayload.name = locationData.name;
+            }
+            if (locationData.address) {
+                locationPayload.address = locationData.address;
+            }
+
+            await instance.sock.sendMessage(jid, { location: locationPayload });
+            await sendFollowUpText(message);
+        } else if (normalizedType === 'contact') {
+            const contactData = parseStructuredData(contact) || parseStructuredData(mediaUrl);
+            if (!contactData || !contactData.name || !contactData.phone) {
+                return res.status(400).json({ error: 'Dados do contato inválidos' });
+            }
+
+            const vcard = buildVCard(contactData);
+            await instance.sock.sendMessage(jid, {
+                contacts: {
+                    displayName: contactData.name,
+                    contacts: [
+                        {
+                            displayName: contactData.name,
+                            vcard
+                        }
+                    ]
+                }
+            });
+            await sendFollowUpText(message);
+        } else if (normalizedType === 'poll') {
+            const pollData = parseStructuredData(poll) || parseStructuredData(mediaUrl);
+            if (
+                !pollData ||
+                !pollData.question ||
+                !Array.isArray(pollData.options) ||
+                pollData.options.length < 2
+            ) {
+                return res.status(400).json({ error: 'Dados da enquete inválidos' });
+            }
+
+            const selectableCount = pollData.allowMultiple
+                ? Math.min(pollData.maxSelections || pollData.options.length, pollData.options.length)
+                : 1;
+
+            await instance.sock.sendMessage(jid, {
+                poll: {
+                    name: pollData.name || pollData.question,
+                    values: pollData.options,
+                    selectableCount: Math.max(1, selectableCount)
+                }
+            });
+            await sendFollowUpText(message);
         } else {
             return res.status(400).json({ error: `Unsupported message type: ${type}` });
         }
 
-        console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
+        console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to} (${normalizedType})`);
         res.json({ success: true, instanceId: instanceId });
     } catch (error) {
         console.error(`❌ Erro ao enviar mensagem da instância ${instanceId}:`, error);
@@ -570,3 +771,5 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
     console.log('⏳ Aguardando comandos para conectar instâncias...');
 });
+
+module.exports = { app, instances };
