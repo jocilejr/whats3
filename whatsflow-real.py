@@ -107,6 +107,39 @@ def _get_minio_public_base() -> str:
     return f"{scheme}://{_MINIO_ENDPOINT}"
 
 
+def update_minio_runtime_configuration(
+    *,
+    endpoint: Optional[str] = None,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    bucket: Optional[str] = None,
+    public_url: Optional[str] = None,
+) -> None:
+    """Atualiza as configurações do MinIO em tempo de execução."""
+
+    global MINIO_ENDPOINT_RAW, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_PUBLIC_URL
+    global _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT, _MINIO_CLIENT
+
+    if endpoint is not None:
+        MINIO_ENDPOINT_RAW = endpoint or ""
+        _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT = _parse_minio_endpoint(MINIO_ENDPOINT_RAW)
+
+    if public_url is not None:
+        MINIO_PUBLIC_URL = public_url or None
+
+    if access_key is not None:
+        MINIO_ACCESS_KEY = access_key
+
+    if secret_key is not None:
+        MINIO_SECRET_KEY = secret_key
+
+    if bucket is not None:
+        MINIO_BUCKET = bucket
+
+    # Força recriação do cliente com as novas credenciais na próxima utilização
+    _MINIO_CLIENT = None
+
+
 def _ensure_minio_dependency():
     global Minio
     if Minio is not None:
@@ -2645,6 +2678,217 @@ HTML_APP = '''<!DOCTYPE html>
             font-style: italic;
         }
 
+        /* Settings Section */
+        .settings-section {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .settings-header h2 {
+            font-size: 1.75rem;
+            margin-bottom: 4px;
+        }
+
+        .settings-header p {
+            color: var(--text-secondary);
+            max-width: 720px;
+            font-size: 0.95rem;
+        }
+
+        .settings-tabs,
+        .settings-subtabs {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .settings-tab,
+        .settings-subtab {
+            border: none;
+            background: #f3f4f6;
+            color: #374151;
+            padding: 10px 18px;
+            border-radius: 9999px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: inset 0 0 0 1px #e5e7eb;
+        }
+
+        .settings-tab:hover,
+        .settings-subtab:hover {
+            background: #e5e7eb;
+        }
+
+        .settings-tab.active,
+        .settings-subtab.active {
+            background: var(--primary-light);
+            color: white;
+            box-shadow: 0 10px 30px rgba(37, 211, 102, 0.2);
+        }
+
+        .settings-panel {
+            display: none;
+        }
+
+        .settings-panel.active {
+            display: block;
+        }
+
+        .settings-subpanel {
+            display: none;
+        }
+
+        .settings-subpanel.active {
+            display: block;
+        }
+
+        .settings-card {
+            background: white;
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        .settings-description {
+            color: var(--text-secondary);
+            margin-bottom: 18px;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .settings-alert {
+            border-radius: 12px;
+            padding: 14px 18px;
+            font-weight: 500;
+            margin-bottom: 18px;
+        }
+
+        .settings-alert.success {
+            background: rgba(34, 197, 94, 0.12);
+            color: #15803d;
+            border: 1px solid rgba(34, 197, 94, 0.35);
+        }
+
+        .settings-alert.error {
+            background: rgba(239, 68, 68, 0.12);
+            color: #b91c1c;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+        }
+
+        .settings-alert.info {
+            background: rgba(59, 130, 246, 0.12);
+            color: #1d4ed8;
+            border: 1px solid rgba(59, 130, 246, 0.25);
+        }
+
+        .settings-loading {
+            display: none;
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(59, 130, 246, 0.08);
+            color: #1d4ed8;
+            border: 1px dashed rgba(59, 130, 246, 0.3);
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+
+        .settings-form {
+            display: grid;
+            gap: 18px;
+        }
+
+        .settings-form .form-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
+            gap: 18px;
+        }
+
+        .settings-form .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .settings-form label {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .settings-form input {
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+
+        .settings-form input:focus {
+            border-color: var(--primary-light);
+            background: white;
+            box-shadow: 0 0 0 4px rgba(37, 211, 102, 0.15);
+            outline: none;
+        }
+
+        .settings-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .settings-actions .btn {
+            min-width: 160px;
+            justify-content: center;
+        }
+
+        .settings-hint {
+            margin-top: 20px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: rgba(13, 148, 136, 0.12);
+            color: #0f766e;
+            border: 1px solid rgba(13, 148, 136, 0.2);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 768px) {
+            .settings-form .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .settings-card {
+                padding: 20px;
+            }
+
+            .settings-tabs,
+            .settings-subtabs {
+                gap: 8px;
+            }
+
+            .settings-tab,
+            .settings-subtab {
+                padding: 8px 14px;
+                font-size: 0.95rem;
+            }
+
+            .settings-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .settings-actions .btn {
+                width: 100%;
+                min-width: unset;
+            }
+        }
+
         /* Ensure schedule modal appears above campaign management */
         #scheduleMessageModal {
             z-index: 1100;
@@ -2694,6 +2938,9 @@ HTML_APP = '''<!DOCTYPE html>
             </button>
             <button class="nav-btn" onclick="showSection('flows')">
                 <span>🎯</span> Fluxos
+            </button>
+            <button class="nav-btn" onclick="showSection('settings')">
+                <span>⚙️</span> Configurações
             </button>
         </nav>
         
@@ -2899,6 +3146,73 @@ HTML_APP = '''<!DOCTYPE html>
                         <button class="btn btn-primary" onclick="createNewFlow()">
                             🚀 Criar Primeiro Fluxo
                         </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Section -->
+        <div id="settings" class="section">
+            <div class="settings-section">
+                <div class="settings-header">
+                    <h2>⚙️ Configurações</h2>
+                    <p>Mantenha suas integrações conectadas e atualize as credenciais utilizadas pelo WhatsFlow.</p>
+                </div>
+
+                <div class="settings-tabs">
+                    <button type="button" class="settings-tab active" data-settings-tab="credentials" onclick="selectSettingsTab('credentials')">
+                        🔐 Credenciais
+                    </button>
+                </div>
+
+                <div id="settings-panel-credentials" class="settings-panel active">
+                    <div class="settings-subtabs">
+                        <button type="button" class="settings-subtab active" data-settings-subtab="minio" onclick="selectSettingsSubTab('minio')">
+                            📦 Credenciais MinIO
+                        </button>
+                    </div>
+
+                    <div id="settings-subpanel-minio" class="settings-subpanel settings-card active" data-settings-subpanel="minio">
+                        <h3>📦 Credenciais MinIO</h3>
+                        <p class="settings-description">
+                            Configure o acesso ao servidor MinIO responsável por armazenar mídias e arquivos enviados pela plataforma.
+                        </p>
+
+                        <div id="minioSettingsStatus" class="settings-alert" style="display: none;"></div>
+                        <div id="minioSettingsLoading" class="settings-loading" style="display: block;">Carregando credenciais...</div>
+
+                        <form id="minioSettingsForm" class="settings-form" onsubmit="saveMinioSettings(event)" style="display: none;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="minioAccessKey">Access Key</label>
+                                    <input type="text" id="minioAccessKey" name="accessKey" placeholder="Ex: MINIOACCESSKEY" autocomplete="off" oninput="clearMinioStatus()" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="minioSecretKey">Secret Key</label>
+                                    <input type="password" id="minioSecretKey" name="secretKey" placeholder="Ex: ************" autocomplete="new-password" oninput="clearMinioStatus()" required>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="minioBucket">Bucket</label>
+                                    <input type="text" id="minioBucket" name="bucket" placeholder="Ex: whatsflow-bucket" autocomplete="off" oninput="clearMinioStatus()" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="minioUrl">URL do servidor</label>
+                                    <input type="text" id="minioUrl" name="url" placeholder="Ex: https://minio.seudominio.com" autocomplete="off" oninput="clearMinioStatus()" required>
+                                </div>
+                            </div>
+
+                            <div class="settings-actions">
+                                <button type="submit" id="minioSaveButton" class="btn btn-primary">💾 Salvar</button>
+                                <button type="button" class="btn btn-secondary" onclick="loadMinioSettings(true)">🔄 Recarregar</button>
+                            </div>
+                        </form>
+
+                        <div class="settings-hint">
+                            <strong>Dica:</strong> utilize credenciais dedicadas e mantenha o bucket configurado acima com acesso restrito para garantir a segurança das mídias.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3394,10 +3708,195 @@ HTML_APP = '''<!DOCTYPE html>
         let currentInstanceId = null;
         let qrPollingInterval = null;
         let statusPollingInterval = null;
+        let minioSettingsLoaded = false;
+        let minioSettingsLoading = false;
+
+        function selectSettingsTab(tabName) {
+            const tabButtons = document.querySelectorAll('[data-settings-tab]');
+            tabButtons.forEach(button => {
+                const value = button.getAttribute('data-settings-tab');
+                const isActive = value === tabName;
+                button.classList.toggle('active', isActive);
+
+                const panel = document.getElementById(`settings-panel-${value}`);
+                if (panel) {
+                    panel.classList.toggle('active', isActive);
+                }
+            });
+
+            if (tabName === 'credentials') {
+                selectSettingsSubTab('minio');
+            }
+        }
+
+        function selectSettingsSubTab(subTab) {
+            const subTabButtons = document.querySelectorAll('[data-settings-subtab]');
+            subTabButtons.forEach(button => {
+                const value = button.getAttribute('data-settings-subtab');
+                const isActive = value === subTab;
+                button.classList.toggle('active', isActive);
+            });
+
+            const subPanels = document.querySelectorAll('.settings-subpanel');
+            subPanels.forEach(panel => {
+                const value = panel.getAttribute('data-settings-subpanel');
+                const isActive = value === subTab;
+                panel.classList.toggle('active', isActive);
+            });
+
+            if (subTab === 'minio') {
+                loadMinioSettings();
+            }
+        }
+
+        function setMinioStatus(type, message) {
+            const statusElement = document.getElementById('minioSettingsStatus');
+            if (!statusElement) {
+                return;
+            }
+
+            if (!message) {
+                statusElement.style.display = 'none';
+                statusElement.textContent = '';
+                statusElement.className = 'settings-alert';
+                return;
+            }
+
+            statusElement.textContent = message;
+            statusElement.className = `settings-alert ${type}`;
+            statusElement.style.display = 'block';
+        }
+
+        function clearMinioStatus() {
+            setMinioStatus('info', '');
+        }
+
+        function toggleMinioSavingState(isSaving) {
+            const form = document.getElementById('minioSettingsForm');
+            if (!form) {
+                return;
+            }
+
+            const inputs = form.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.disabled = isSaving;
+            });
+
+            const saveButton = document.getElementById('minioSaveButton');
+            if (saveButton) {
+                saveButton.disabled = isSaving;
+                saveButton.textContent = isSaving ? '💾 Salvando...' : '💾 Salvar';
+            }
+        }
+
+        async function loadMinioSettings(force = false) {
+            if (minioSettingsLoading) {
+                return;
+            }
+
+            if (!force && minioSettingsLoaded) {
+                return;
+            }
+
+            const loadingElement = document.getElementById('minioSettingsLoading');
+            const formElement = document.getElementById('minioSettingsForm');
+
+            if (!formElement) {
+                return;
+            }
+
+            minioSettingsLoading = true;
+            clearMinioStatus();
+
+            if (loadingElement) {
+                loadingElement.style.display = 'block';
+            }
+
+            formElement.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/settings/minio');
+
+                if (!response.ok) {
+                    throw new Error('Não foi possível carregar as credenciais do MinIO.');
+                }
+
+                const data = await response.json();
+
+                const accessKeyInput = document.getElementById('minioAccessKey');
+                const secretKeyInput = document.getElementById('minioSecretKey');
+                const bucketInput = document.getElementById('minioBucket');
+                const urlInput = document.getElementById('minioUrl');
+
+                if (accessKeyInput) accessKeyInput.value = data.accessKey || '';
+                if (secretKeyInput) secretKeyInput.value = data.secretKey || '';
+                if (bucketInput) bucketInput.value = data.bucket || '';
+                if (urlInput) urlInput.value = data.url || '';
+
+                minioSettingsLoaded = true;
+            } catch (error) {
+                console.error('❌ Erro ao carregar credenciais MinIO:', error);
+                setMinioStatus('error', error.message || 'Não foi possível carregar as credenciais salvas.');
+            } finally {
+                if (loadingElement) {
+                    loadingElement.style.display = 'none';
+                }
+
+                formElement.style.display = 'grid';
+                toggleMinioSavingState(false);
+                minioSettingsLoading = false;
+            }
+        }
+
+        async function saveMinioSettings(event) {
+            event.preventDefault();
+
+            const accessKey = (document.getElementById('minioAccessKey')?.value || '').trim();
+            const secretKey = (document.getElementById('minioSecretKey')?.value || '').trim();
+            const bucket = (document.getElementById('minioBucket')?.value || '').trim();
+            const url = (document.getElementById('minioUrl')?.value || '').trim();
+
+            if (!accessKey || !secretKey || !bucket || !url) {
+                setMinioStatus('error', 'Preencha todos os campos antes de salvar.');
+                return;
+            }
+
+            try {
+                toggleMinioSavingState(true);
+                setMinioStatus('info', 'Salvando credenciais...');
+
+                const response = await fetch('/api/settings/minio', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        accessKey,
+                        secretKey,
+                        bucket,
+                        url
+                    })
+                });
+
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(data.error || data.message || 'Não foi possível salvar as credenciais.');
+                }
+
+                setMinioStatus('success', data.message || 'Credenciais salvas com sucesso!');
+                minioSettingsLoaded = true;
+            } catch (error) {
+                console.error('❌ Erro ao salvar credenciais MinIO:', error);
+                setMinioStatus('error', error.message || 'Não foi possível salvar as credenciais. Tente novamente.');
+            } finally {
+                toggleMinioSavingState(false);
+            }
+        }
 
         function showSection(name) {
             console.log('📄 Tentando mostrar seção:', name);
-            
+
             // Hide all sections
             const sections = document.querySelectorAll('.section');
             sections.forEach(s => {
@@ -3448,6 +3947,8 @@ HTML_APP = '''<!DOCTYPE html>
                 loadInstancesForGroups();
             } else if (name === 'flows') {
                 loadFlows();
+            } else if (name === 'settings') {
+                selectSettingsTab('credentials');
             }
         }
 
@@ -5740,6 +6241,8 @@ HTML_APP = '''<!DOCTYPE html>
                 populateGroupInstanceSelect();
             } else if (sectionName === 'flows') {
                 loadFlows();
+            } else if (sectionName === 'settings') {
+                selectSettingsTab('credentials');
             }
         }
         
@@ -6971,7 +7474,15 @@ def init_db():
     cursor.execute("PRAGMA cache_size = 1000")
     cursor.execute("PRAGMA temp_store = MEMORY")
     cursor.execute("PRAGMA mmap_size = 268435456")  # 256MB
-    
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+
     # Enhanced tables with better schema
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS instances (
@@ -7105,7 +7616,28 @@ def init_db():
             FOREIGN KEY (campaign_id) REFERENCES campaigns (id) ON DELETE CASCADE
         )
     """)
-    
+
+    try:
+        cursor.execute(
+            "SELECT key, value FROM settings WHERE key LIKE 'minio.%'"
+        )
+        stored_settings = cursor.fetchall()
+        if stored_settings:
+            settings_map = {row[0]: row[1] for row in stored_settings}
+            update_minio_runtime_configuration(
+                endpoint=settings_map.get("minio.url"),
+                public_url=settings_map.get("minio.url"),
+                access_key=settings_map.get("minio.access_key"),
+                secret_key=settings_map.get("minio.secret_key"),
+                bucket=settings_map.get("minio.bucket"),
+            )
+            logger.info("⚙️ Credenciais do MinIO carregadas do banco de dados.")
+    except sqlite3.Error as exc:
+        logger.warning(
+            "⚠️ Não foi possível carregar as configurações do MinIO salvas: %s",
+            exc,
+        )
+
     conn.commit()
     conn.close()
     print("✅ Banco de dados inicializado com suporte para Campanhas e WebSocket")
@@ -8272,6 +8804,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_get_webhooks()
         elif self.path == '/api/scheduled-messages':
             self.handle_get_scheduled_messages()
+        elif self.path == '/api/settings/minio':
+            self.handle_get_minio_settings()
         else:
             self.send_error(404, "Not Found")
     
@@ -8329,6 +8863,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_send_webhook()
         elif self.path == '/api/scheduled-messages':
             self.handle_create_scheduled_message()
+        elif self.path == '/api/settings/minio':
+            self.handle_update_minio_settings()
         else:
             self.send_error(404, "Not Found")
     
@@ -8367,11 +8903,18 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.send_error(404, "Not Found")
     
     def send_html_response(self, html_content):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.send_header('Cache-Control', 'no-cache')
-        self.end_headers()
-        self.wfile.write(html_content.encode('utf-8'))
+        try:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(html_content.encode('utf-8'))
+        except (BrokenPipeError, ConnectionResetError):
+            logger.warning(
+                "⚠️ Cliente encerrou a conexão antes de receber a resposta HTML."
+            )
+        except Exception as exc:
+            logger.exception("❌ Erro ao enviar resposta HTML: %s", exc)
     
     def send_json_response(self, data, status_code=200):
         self.send_response(status_code)
@@ -8382,7 +8925,143 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         self.end_headers()
         json_data = json.dumps(data, ensure_ascii=False, indent=2)
         self.wfile.write(json_data.encode('utf-8'))
-    
+
+    def handle_get_minio_settings(self):
+        try:
+            with sqlite3.connect(DB_FILE, timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT key, value FROM settings WHERE key LIKE 'minio.%'"
+                )
+                rows = cursor.fetchall()
+        except sqlite3.Error as exc:
+            logger.error("❌ Erro ao carregar configurações do MinIO: %s", exc)
+            self.send_json_response(
+                {"error": "Não foi possível carregar as credenciais do MinIO."},
+                500,
+            )
+            return
+
+        settings_map = {row[0]: row[1] for row in rows}
+        response_data = {
+            "accessKey": settings_map.get("minio.access_key", MINIO_ACCESS_KEY or ""),
+            "secretKey": settings_map.get("minio.secret_key", MINIO_SECRET_KEY or ""),
+            "bucket": settings_map.get("minio.bucket", MINIO_BUCKET or ""),
+            "url": settings_map.get("minio.url", MINIO_ENDPOINT_RAW or ""),
+        }
+
+        self.send_json_response(response_data)
+
+    def handle_update_minio_settings(self):
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+        except (TypeError, ValueError):
+            self.send_json_response({"error": "Requisição inválida."}, 400)
+            return
+
+        if content_length <= 0:
+            self.send_json_response({"error": "Nenhum dado enviado."}, 400)
+            return
+
+        try:
+            payload = self.rfile.read(content_length)
+            data = json.loads(payload.decode('utf-8'))
+        except json.JSONDecodeError:
+            self.send_json_response({"error": "JSON inválido."}, 400)
+            return
+
+        required_fields = ["accessKey", "secretKey", "bucket", "url"]
+        missing_fields = [
+            field for field in required_fields
+            if not str(data.get(field, "")).strip()
+        ]
+        if missing_fields:
+            self.send_json_response(
+                {
+                    "error": (
+                        "Os campos obrigatórios não foram informados: "
+                        + ", ".join(missing_fields)
+                    )
+                },
+                400,
+            )
+            return
+
+        access_key = data["accessKey"].strip()
+        secret_key = data["secretKey"].strip()
+        bucket = data["bucket"].strip()
+        url = data["url"].strip()
+        if len(url) > 1:
+            url = url.rstrip('/')
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        try:
+            with sqlite3.connect(DB_FILE, timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    ("minio.access_key", access_key, timestamp),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    ("minio.secret_key", secret_key, timestamp),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    ("minio.bucket", bucket, timestamp),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    ("minio.url", url, timestamp),
+                )
+                conn.commit()
+        except sqlite3.Error as exc:
+            logger.exception("❌ Erro ao salvar credenciais do MinIO: %s", exc)
+            self.send_json_response(
+                {"error": "Não foi possível salvar as credenciais do MinIO."},
+                500,
+            )
+            return
+
+        update_minio_runtime_configuration(
+            endpoint=url,
+            public_url=url,
+            access_key=access_key,
+            secret_key=secret_key,
+            bucket=bucket,
+        )
+        logger.info("✅ Credenciais do MinIO atualizadas via API.")
+
+        self.send_json_response(
+            {
+                "success": True,
+                "message": "Credenciais do MinIO atualizadas com sucesso.",
+                "settings": {
+                    "accessKey": access_key,
+                    "secretKey": secret_key,
+                    "bucket": bucket,
+                    "url": url,
+                },
+            }
+        )
+
     def handle_get_instances(self):
         try:
             with sqlite3.connect(DB_FILE, timeout=30) as conn:
