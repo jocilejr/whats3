@@ -1,5 +1,18 @@
 # Here are your Instructions
 
+## Dependências Python (WhatsFlow Real)
+
+A versão real do WhatsFlow requer a biblioteca [`minio`](https://pypi.org/project/minio/)
+para realizar uploads ao servidor de arquivos. Antes de executar
+`whatsflow-real.py`, instale essa dependência manualmente:
+
+```bash
+python3 -m pip install minio
+```
+
+Se o pacote não estiver disponível, o aplicativo exibirá um erro orientando a
+instalação manual.
+
 ## CORS liberado
 
 O serviço `baileys_service` e os demais servidores utilizam `cors` com

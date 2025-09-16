@@ -115,17 +115,11 @@ def _ensure_minio_dependency():
     try:
         Minio = importlib.import_module("minio").Minio
         return Minio
-    except ModuleNotFoundError:
-        print("📦 Instalando dependência 'minio' (necessária para uploads)...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "minio"])
-        except Exception as exc:
-            raise RuntimeError(
-                "Não foi possível instalar a biblioteca 'minio'. "
-                "Instale-a manualmente executando: pip install minio"
-            ) from exc
-        Minio = importlib.import_module("minio").Minio
-        return Minio
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Biblioteca 'minio' não encontrada. "
+            "Instale-a manualmente executando: python3 -m pip install minio"
+        ) from exc
 
 
 def get_minio_client():

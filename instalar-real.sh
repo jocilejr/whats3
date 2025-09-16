@@ -29,6 +29,15 @@ fi
 PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
 echo "✅ Python $PYTHON_VERSION encontrado"
 
+echo "🔍 Verificando dependências Python (minio)..."
+if ! python3 -c "import minio" >/dev/null 2>&1; then
+    echo "❌ Biblioteca 'minio' não encontrada!"
+    echo "   Instale executando: python3 -m pip install minio"
+    echo "   Depois execute novamente este instalador."
+    exit 1
+fi
+echo "✅ Biblioteca 'minio' disponível"
+
 # Verificar Node.js
 echo "🔍 Verificando Node.js..."
 if ! command -v node &> /dev/null; then
