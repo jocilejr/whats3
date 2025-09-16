@@ -195,20 +195,20 @@ export default function MessagesCenter({ baileysHealthy }) {
         {/* Sidebar de Conversas */}
         <div className="conversations-sidebar">
           <div className="conversations-header">
-            <h3>💬 Conversas</h3>
+            <h3>Conversas</h3>
             <div className="conversations-actions">
               <button
                 onClick={() => setShowWebhookModal(true)}
                 className="webhook-button"
               >
-                ⚙️ Config
+                Configurações
               </button>
             </div>
           </div>
 
           {/* Filtro de Dispositivos */}
           <div className="device-filter">
-            <label>📱 Dispositivo:</label>
+            <label>Dispositivo:</label>
             <select
               value={selectedDevice}
               onChange={(e) => setSelectedDevice(e.target.value)}
@@ -226,7 +226,7 @@ export default function MessagesCenter({ baileysHealthy }) {
           <div className="search-container">
             <input
               type="text"
-              placeholder="🔍 Buscar conversa..."
+              placeholder="Buscar conversa..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="search-input"
@@ -252,7 +252,7 @@ export default function MessagesCenter({ baileysHealthy }) {
                     <div className="conversation-name">{conversation.name}</div>
                     <div className="conversation-phone">{conversation.phone_number}</div>
                     <div className="device-tag">
-                      📱 {conversation.device_name || 'WhatsApp 1'}
+                      Dispositivo: {conversation.device_name || 'WhatsApp 1'}
                     </div>
                   </div>
                   <div className="conversation-time">
@@ -277,7 +277,7 @@ export default function MessagesCenter({ baileysHealthy }) {
                     <h4>{selectedConversation.name}</h4>
                     <p>{selectedConversation.phone_number}</p>
                     <div className="device-info">
-                      📱 {selectedConversation.device_name || 'WhatsApp 1'}
+                      Dispositivo: {selectedConversation.device_name || 'WhatsApp 1'}
                     </div>
                     <p className="jid">JID: {selectedConversation.phone_number}@s.whatsapp.net</p>
                   </div>
@@ -302,7 +302,7 @@ export default function MessagesCenter({ baileysHealthy }) {
                         {formatTime(message.timestamp)}
                         {message.direction === 'outgoing' && (
                           <span className={`delivery-status ${message.delivered ? 'delivered' : 'sending'}`}>
-                            {message.delivered ? '✓✓' : '⏳'}
+                            {message.delivered ? 'Entregue' : 'Enviando'}
                           </span>
                         )}
                       </div>
@@ -327,14 +327,13 @@ export default function MessagesCenter({ baileysHealthy }) {
                     disabled={!newMessage.trim()}
                     className="send-button"
                   >
-                    📤
+                    Enviar
                   </button>
                 </div>
               </div>
             </>
           ) : (
             <div className="no-conversation-selected">
-              <div className="no-chat-icon">💬</div>
               <h3>Selecione uma conversa</h3>
               <p>Escolha uma conversa da lista para começar a visualizar mensagens</p>
             </div>
@@ -403,14 +402,14 @@ const MacrosSidebar = ({ selectedConversation, webhooks, onTriggerMacro, onRefre
   return (
     <div className="macros-sidebar">
       <div className="macros-header">
-        <h3>🎯 Macros</h3>
+        <h3>Macros</h3>
         <div className="contact-selected">
           <div className="selected-contact-avatar">
             {selectedConversation.name.charAt(0).toUpperCase()}
           </div>
           <div className="selected-contact-info">
             <div className="selected-contact-name">{selectedConversation.name}</div>
-            <div className="selected-contact-device">📱 {selectedConversation.device_name}</div>
+            <div className="selected-contact-device">Dispositivo: {selectedConversation.device_name || 'WhatsApp 1'}</div>
           </div>
         </div>
       </div>
@@ -418,7 +417,7 @@ const MacrosSidebar = ({ selectedConversation, webhooks, onTriggerMacro, onRefre
       <div className="macros-content">
         {isAddingMacro ? (
           <div className="add-macro-form">
-            <h4>➕ Nova Macro</h4>
+            <h4>Nova macro</h4>
             <input
               type="text"
               placeholder="Nome da macro (ex: Entrega - Amuleto)"
@@ -440,8 +439,8 @@ const MacrosSidebar = ({ selectedConversation, webhooks, onTriggerMacro, onRefre
               className="macro-textarea"
             />
             <div className="macro-form-actions">
-              <button onClick={addMacro} className="save-macro">💾 Salvar</button>
-              <button onClick={() => setIsAddingMacro(false)} className="cancel-macro">❌ Cancelar</button>
+              <button onClick={addMacro} className="save-macro">Salvar</button>
+              <button onClick={() => setIsAddingMacro(false)} className="cancel-macro">Cancelar</button>
             </div>
           </div>
         ) : (
@@ -459,10 +458,7 @@ const MacrosSidebar = ({ selectedConversation, webhooks, onTriggerMacro, onRefre
                       className={`macro-trigger-button ${webhook.name.toLowerCase().includes('entrega') ? 'delivery' : 'default'}`}
                       title={webhook.description}
                     >
-                      <span className="macro-icon">
-                        {webhook.name.toLowerCase().includes('entrega') ? '📦' : 
-                         webhook.name.toLowerCase().includes('link') ? '🔗' : '🎯'}
-                      </span>
+                      <span className="macro-icon">{webhook.name?.charAt(0).toUpperCase() || 'M'}</span>
                       <span className="macro-name">{webhook.name}</span>
                     </button>
                     <button
@@ -470,7 +466,7 @@ const MacrosSidebar = ({ selectedConversation, webhooks, onTriggerMacro, onRefre
                       className="delete-macro-btn"
                       title="Excluir macro"
                     >
-                      🗑️
+                      Excluir
                     </button>
                   </div>
                 ))
@@ -481,7 +477,7 @@ const MacrosSidebar = ({ selectedConversation, webhooks, onTriggerMacro, onRefre
               onClick={() => setIsAddingMacro(true)}
               className="add-macro-btn"
             >
-              ➕ Nova Macro
+              Nova macro
             </button>
           </>
         )}
@@ -528,8 +524,8 @@ const WebhookModal = ({ webhooks, onClose, onWebhookChange }) => {
     <div className="webhook-modal-overlay">
       <div className="webhook-modal">
         <div className="webhook-modal-header">
-          <h3>🔗 Gerenciar Webhooks</h3>
-          <button onClick={onClose} className="close-modal">❌</button>
+          <h3>Gerenciar webhooks</h3>
+          <button onClick={onClose} className="close-modal">Fechar</button>
         </div>
 
         <div className="webhook-modal-content">
@@ -545,7 +541,7 @@ const WebhookModal = ({ webhooks, onClose, onWebhookChange }) => {
                   onClick={() => deleteWebhook(webhook.id)}
                   className="delete-webhook"
                 >
-                  🗑️
+                  Excluir
                 </button>
               </div>
             ))}
@@ -574,8 +570,8 @@ const WebhookModal = ({ webhooks, onClose, onWebhookChange }) => {
                 className="webhook-textarea"
               />
               <div className="webhook-form-actions">
-                <button onClick={addWebhook} className="save-webhook">💾 Salvar</button>
-                <button onClick={() => setIsAdding(false)} className="cancel-webhook">❌ Cancelar</button>
+                <button onClick={addWebhook} className="save-webhook">Salvar</button>
+                <button onClick={() => setIsAdding(false)} className="cancel-webhook">Cancelar</button>
               </div>
             </div>
           ) : (
@@ -583,7 +579,7 @@ const WebhookModal = ({ webhooks, onClose, onWebhookChange }) => {
               onClick={() => setIsAdding(true)}
               className="add-webhook-btn"
             >
-              ➕ Adicionar Webhook
+              Adicionar webhook
             </button>
           )}
         </div>
