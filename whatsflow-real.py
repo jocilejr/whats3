@@ -75,17 +75,27 @@ PORT = 8889
 WEBSOCKET_PORT = 8890
 
 MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT")
-if not MINIO_ENDPOINT_RAW:
-    raise RuntimeError(
-        "Variável de ambiente MINIO_ENDPOINT não configurada. "
-        "Defina o endereço do servidor MinIO antes de iniciar o aplicativo."
-    )
-MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
-MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4")
-MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "meu-bucket")
+MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY")
+MINIO_BUCKET = os.environ.get("MINIO_BUCKET")
 MINIO_PUBLIC_URL = os.environ.get("MINIO_PUBLIC_URL")
 _MINIO_CLIENT = None
 Minio = None
+
+
+_REQUIRED_MINIO_ENV = {
+    "MINIO_ENDPOINT": MINIO_ENDPOINT_RAW,
+    "MINIO_ACCESS_KEY": MINIO_ACCESS_KEY,
+    "MINIO_SECRET_KEY": MINIO_SECRET_KEY,
+    "MINIO_BUCKET": MINIO_BUCKET,
+}
+_MISSING_MINIO_ENV = [name for name, value in _REQUIRED_MINIO_ENV.items() if not value]
+if _MISSING_MINIO_ENV:
+    missing_env = ", ".join(sorted(_MISSING_MINIO_ENV))
+    raise RuntimeError(
+        "Variáveis de ambiente do MinIO não configuradas: "
+        f"{missing_env}. Defina-as antes de iniciar o aplicativo."
+    )
 
 
 def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
