@@ -182,8 +182,8 @@ def get_current_minio_settings() -> Dict[str, str]:
     """Expose current MinIO settings for API responses."""
 
     return {
-        "access_key": (MINIO_ACCESS_KEY or ""),
-        "secret_key": (MINIO_SECRET_KEY or ""),
+        "accessKey": (MINIO_ACCESS_KEY or ""),
+        "secretKey": (MINIO_SECRET_KEY or ""),
         "bucket": (MINIO_BUCKET or ""),
         "url": (MINIO_ENDPOINT_RAW or ""),
     }
@@ -9042,142 +9042,6 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         json_data = json.dumps(data, ensure_ascii=False, indent=2)
         self.wfile.write(json_data.encode('utf-8'))
 
-    def handle_get_minio_settings(self):
-        try:
-            with sqlite3.connect(DB_FILE, timeout=30) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT key, value FROM settings WHERE key LIKE 'minio.%'"
-                )
-                rows = cursor.fetchall()
-        except sqlite3.Error as exc:
-            logger.error("❌ Erro ao carregar configurações do MinIO: %s", exc)
-            self.send_json_response(
-                {"error": "Não foi possível carregar as credenciais do MinIO."},
-                500,
-            )
-            return
-
-        settings_map = {row[0]: row[1] for row in rows}
-        response_data = {
-            "accessKey": settings_map.get("minio.access_key", MINIO_ACCESS_KEY or ""),
-            "secretKey": settings_map.get("minio.secret_key", MINIO_SECRET_KEY or ""),
-            "bucket": settings_map.get("minio.bucket", MINIO_BUCKET or ""),
-            "url": settings_map.get("minio.url", MINIO_ENDPOINT_RAW or ""),
-        }
-
-        self.send_json_response(response_data)
-
-    def handle_update_minio_settings(self):
-        try:
-            content_length = int(self.headers.get('Content-Length', 0))
-        except (TypeError, ValueError):
-            self.send_json_response({"error": "Requisição inválida."}, 400)
-            return
-
-        if content_length <= 0:
-            self.send_json_response({"error": "Nenhum dado enviado."}, 400)
-            return
-
-        try:
-            payload = self.rfile.read(content_length)
-            data = json.loads(payload.decode('utf-8'))
-        except json.JSONDecodeError:
-            self.send_json_response({"error": "JSON inválido."}, 400)
-            return
-
-        required_fields = ["accessKey", "secretKey", "bucket", "url"]
-        missing_fields = [
-            field for field in required_fields
-            if not str(data.get(field, "")).strip()
-        ]
-        if missing_fields:
-            self.send_json_response(
-                {
-                    "error": (
-                        "Os campos obrigatórios não foram informados: "
-                        + ", ".join(missing_fields)
-                    )
-                },
-                400,
-            )
-            return
-
-        access_key = data["accessKey"].strip()
-        secret_key = data["secretKey"].strip()
-        bucket = data["bucket"].strip()
-        url = data["url"].strip()
-        if len(url) > 1:
-            url = url.rstrip('/')
-
-        timestamp = datetime.now(timezone.utc).isoformat()
-
-        try:
-            with sqlite3.connect(DB_FILE, timeout=30) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    INSERT INTO settings (key, value, updated_at)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
-                    """,
-                    ("minio.access_key", access_key, timestamp),
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO settings (key, value, updated_at)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
-                    """,
-                    ("minio.secret_key", secret_key, timestamp),
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO settings (key, value, updated_at)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
-                    """,
-                    ("minio.bucket", bucket, timestamp),
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO settings (key, value, updated_at)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
-                    """,
-                    ("minio.url", url, timestamp),
-                )
-                conn.commit()
-        except sqlite3.Error as exc:
-            logger.exception("❌ Erro ao salvar credenciais do MinIO: %s", exc)
-            self.send_json_response(
-                {"error": "Não foi possível salvar as credenciais do MinIO."},
-                500,
-            )
-            return
-
-        update_minio_runtime_configuration(
-            endpoint=url,
-            public_url=url,
-            access_key=access_key,
-            secret_key=secret_key,
-            bucket=bucket,
-        )
-        logger.info("✅ Credenciais do MinIO atualizadas via API.")
-
-        self.send_json_response(
-            {
-                "success": True,
-                "message": "Credenciais do MinIO atualizadas com sucesso.",
-                "settings": {
-                    "accessKey": access_key,
-                    "secretKey": secret_key,
-                    "bucket": bucket,
-                    "url": url,
-                },
-            }
-        )
-
     def handle_get_instances(self):
         try:
             with sqlite3.connect(DB_FILE, timeout=30) as conn:
@@ -9404,25 +9268,61 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.send_json_response({"error": "JSON inválido."}, 400)
             return
 
-        required_fields = ("access_key", "secret_key", "bucket", "url")
-        cleaned: Dict[str, str] = {}
-        for field in required_fields:
-            value = data.get(field)
+        field_aliases: Dict[str, Tuple[str, ...]] = {
+            "accessKey": ("accessKey", "access_key"),
+            "secretKey": ("secretKey", "secret_key"),
+            "bucket": ("bucket", "bucket_name"),
+            "url": ("url", "endpoint", "public_url"),
+        }
+        normalized: Dict[str, str] = {}
+        missing_fields = []
+
+        for canonical, aliases in field_aliases.items():
+            value = None
+            for alias in aliases:
+                if alias in data:
+                    value = data.get(alias)
+                    break
+
+            if value is None:
+                missing_fields.append(canonical)
+                continue
+
             if not isinstance(value, str):
-                self.send_json_response({"error": f"Campo '{field}' é obrigatório."}, 400)
+                self.send_json_response(
+                    {"error": f"Campo '{canonical}' deve ser uma string."},
+                    400,
+                )
                 return
+
             trimmed = value.strip()
             if not trimmed:
-                self.send_json_response({"error": f"Campo '{field}' é obrigatório."}, 400)
-                return
-            cleaned[field] = trimmed
+                missing_fields.append(canonical)
+                continue
+
+            normalized[canonical] = trimmed
+
+        if missing_fields:
+            self.send_json_response(
+                {
+                    "error": (
+                        "Os campos obrigatórios não foram informados: "
+                        + ", ".join(sorted(set(missing_fields)))
+                    )
+                },
+                400,
+            )
+            return
+
+        if len(normalized["url"]) > 1:
+            normalized["url"] = normalized["url"].rstrip("/")
 
         try:
             save_minio_credentials(
-                cleaned["access_key"],
-                cleaned["secret_key"],
-                cleaned["bucket"],
-                cleaned["url"],
+                normalized["accessKey"],
+                normalized["secretKey"],
+                normalized["bucket"],
+                normalized["url"],
             )
         except sqlite3.Error as exc:
             logger.exception("Erro ao salvar credenciais do MinIO")
