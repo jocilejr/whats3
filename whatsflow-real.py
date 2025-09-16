@@ -82,6 +82,7 @@ MINIO_PUBLIC_URL = os.environ.get("MINIO_PUBLIC_URL")
 _MINIO_CLIENT = None
 _MINIO_ENDPOINT = None
 _MINIO_SECURE_DEFAULT = False
+_MINIO_BUCKET_POLICY_APPLIED = False
 Minio = None
 _MINIO_POLICY_CHECKED = False
 _MINIO_PRESIGNED_WARNING = False
@@ -152,6 +153,7 @@ def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
 
 
 def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
+fix-minio-upload-connection-error-ss2z8w
     """Combine environment overrides with persisted MinIO credentials."""
 
     default_access = "03CnLEOqVp65uzt9dbpp"
@@ -183,6 +185,7 @@ def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
     public_url: Optional[str] = None
     if env_public is not None and env_public.strip() != "":
         public_url = env_public.strip()
+
 
     return endpoint_raw, access_key, secret_key, bucket, public_url
 
@@ -251,6 +254,24 @@ def _get_minio_public_base() -> str:
     return f"{scheme}://{_MINIO_ENDPOINT}"
 
 
+def _build_minio_object_url(client, object_name: str) -> str:
+    if MINIO_PUBLIC_URL:
+        base = MINIO_PUBLIC_URL.rstrip("/")
+        return f"{base}/{MINIO_BUCKET}/{object_name}"
+
+    try:
+        return client.presigned_get_object(
+            MINIO_BUCKET,
+            object_name,
+            expires=timedelta(days=7),
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Falha ao gerar URL assinada para objeto '%s': %s", object_name, exc
+        )
+        return f"{_get_minio_public_base()}/{MINIO_BUCKET}/{object_name}"
+
+
 def update_minio_runtime_configuration(
     *,
     endpoint: Optional[str] = None,
@@ -293,6 +314,8 @@ def _ensure_minio_dependency():
         Minio = importlib.import_module("minio").Minio
         return Minio
     except ModuleNotFoundError:
+fix-minio-upload-connection-error-ss2z8w
+
         print("📦 Instalando dependência 'minio' automaticamente...")
         installation_succeeded = False
         pep668_detected = False
@@ -302,9 +325,11 @@ def _ensure_minio_dependency():
             ["--user"],
         ]
 
+fix-minio-upload-connection-error-ss2z8w
         idx = 0
         while idx < len(install_variants):
             extra_args = install_variants[idx]
+
             cmd = [
                 sys.executable,
                 "-m",
@@ -333,6 +358,7 @@ def _ensure_minio_dependency():
                 last_error_output = output
                 if output:
                     print(f"⚠️ Falha ao executar '{cmd_display}':\n{output}\n")
+fix-minio-upload-connection-error-ss2z8w
 
                 pep668_error = False
                 if "externally-managed-environment" in output or "externally managed environment" in output:
@@ -345,12 +371,15 @@ def _ensure_minio_dependency():
                         "'--break-system-packages'."
                     )
                     install_variants.append(["--break-system-packages"])
+
             except FileNotFoundError as exc:
                 raise RuntimeError(
                     "Não foi possível localizar o executável do pip para instalar 'minio'."
                 ) from exc
+fix-minio-upload-connection-error-ss2z8w
             finally:
                 idx += 1
+
 
         if not installation_succeeded:
             message = "Não foi possível instalar a biblioteca 'minio'."
@@ -366,13 +395,17 @@ def _ensure_minio_dependency():
                 message += f"\nSaída do pip:\n{last_error_output}"
             raise RuntimeError(message)
 
+fix-minio-upload-connection-error-ss2z8w
         try:
             Minio = importlib.import_module("minio").Minio
             return Minio
+
         except ModuleNotFoundError as exc:  # pragma: no cover - fallback inesperado
             raise RuntimeError(
                 "A biblioteca 'minio' ainda não pôde ser carregada após a instalação automática. "
                 "Verifique o ambiente Python e tente novamente."
+fix-minio-upload-connection-error-ss2z8w
+
             ) from exc
 
 
@@ -466,15 +499,19 @@ def _apply_public_read_policy(client) -> None:
 
 
 def ensure_minio_bucket(client=None):
+    global _MINIO_BUCKET_POLICY_APPLIED
     client = client or get_minio_client()
     try:
-        if not client.bucket_exists(MINIO_BUCKET):
+        bucket_exists = client.bucket_exists(MINIO_BUCKET)
+        if not bucket_exists:
             client.make_bucket(MINIO_BUCKET)
     except Exception as exc:
         raise RuntimeError(
             f"Não foi possível preparar o bucket '{MINIO_BUCKET}' no MinIO: {exc}"
         ) from exc
+fix-minio-upload-connection-error-ss2z8w
     _apply_public_read_policy(client)
+
     return client
 
 
@@ -519,7 +556,9 @@ def upload_to_minio(filename: str, data: bytes) -> str:
         )
     except Exception as exc:
         raise RuntimeError(f"Falha ao enviar arquivo para o MinIO: {exc}") from exc
+fix-minio-upload-connection-error-ss2z8w
     return _generate_minio_file_url(client, object_name)
+
 
 # WebSocket clients management
 if WEBSOCKETS_AVAILABLE:
