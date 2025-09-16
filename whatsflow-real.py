@@ -2803,24 +2803,35 @@ HTML_APP = '''<!DOCTYPE html>
             border-radius: 8px;
             padding: 12px;
             margin: 12px 0;
+            word-break: break-word;
         }
-        
+
         .media-preview {
             max-width: 100%;
             border-radius: 6px;
             margin-top: 8px;
         }
-        
+
         .media-preview img {
             max-width: 100%;
             height: auto;
             border-radius: 6px;
         }
-        
+
         .media-preview audio,
         .media-preview video {
             width: 100%;
             max-height: 200px;
+        }
+
+        .media-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .media-link:hover {
+            text-decoration: underline;
         }
         
         .schedule-actions {
@@ -6919,13 +6930,13 @@ HTML_APP = '''<!DOCTYPE html>
         async function loadScheduledMessages() {
             const container = document.getElementById('scheduled-messages-list');
             container.innerHTML = '<div class="loading">🔄 Carregando mensagens programadas...</div>';
-            
+
             try {
                 const response = await fetch(`${WHATSFLOW_API_URL}/api/scheduled-messages`);
                 const messages = await response.json();
-                
+
                 renderScheduledMessages(messages);
-                
+
             } catch (error) {
                 console.error('❌ Erro ao carregar mensagens programadas:', error);
                 container.innerHTML = `
@@ -6938,11 +6949,129 @@ HTML_APP = '''<!DOCTYPE html>
                 `;
             }
         }
-        
+
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function formatMultilineText(value) {
+            if (!value) {
+                return '';
+            }
+            return escapeHtml(value).replace(/\r?\n/g, '<br>');
+        }
+
+        function sanitizeMediaUrl(url) {
+            if (!url) {
+                return '';
+            }
+
+            const trimmed = String(url).trim();
+            if (!trimmed) {
+                return '';
+            }
+
+            if (/^(data:|blob:)/i.test(trimmed)) {
+                return trimmed;
+            }
+
+            try {
+                const parsed = new URL(trimmed, window.location.origin);
+                if (['http:', 'https:'].includes(parsed.protocol)) {
+                    return parsed.href;
+                }
+            } catch (err) {
+                return '';
+            }
+
+            return '';
+        }
+
+        function getScheduledMediaPreviewHtml(msg, safeUrl, rawUrl) {
+            if (!safeUrl) {
+                if (!rawUrl) {
+                    return `<div class="media-preview" style="color: #64748b;">Nenhuma mídia anexada</div>`;
+                }
+                return `<div class="media-preview"><div style="color: #ef4444; font-size: 0.85rem;">❌ Não foi possível preparar a mídia para visualização.</div></div>`;
+            }
+
+            const escapedUrl = escapeHtml(safeUrl);
+
+            if (msg.message_type === 'image') {
+                return `<div class="media-preview">
+                            <img src="${escapedUrl}" alt="Pré-visualização da imagem"
+                                 style="max-width: 100%; max-height: 200px; border-radius: 6px;"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <div style="display: none; color: #ef4444; padding: 12px;">❌ Não foi possível carregar a imagem</div>
+                        </div>`;
+            }
+
+            if (msg.message_type === 'video') {
+                return `<div class="media-preview">
+                            <video controls style="max-width: 100%; max-height: 200px; border-radius: 6px;"
+                                   onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                <source src="${escapedUrl}">
+                                Seu navegador não suporta vídeos.
+                            </video>
+                            <div style="display: none; color: #ef4444; padding: 12px;">❌ Não foi possível carregar o vídeo</div>
+                        </div>`;
+            }
+
+            if (msg.message_type === 'audio') {
+                return `<div class="media-preview">
+                            <audio controls style="width: 100%;"
+                                   onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                <source src="${escapedUrl}">
+                                Seu navegador não suporta áudio.
+                            </audio>
+                            <div style="display: none; color: #ef4444; padding: 12px;">❌ Não foi possível carregar o áudio</div>
+                        </div>`;
+            }
+
+            return `<div class="media-preview"><a class="media-link" href="${escapedUrl}" target="_blank" rel="noopener">Abrir mídia</a></div>`;
+        }
+
+        function getScheduledMessageContent(msg) {
+            if (!msg) {
+                return `<div style="color: #ef4444;">❌ Mensagem inválida</div>`;
+            }
+
+            if (msg.message_type === 'text') {
+                const content = formatMultilineText(msg.message_text);
+                if (content) {
+                    return `<div>${content}</div>`;
+                }
+                return `<div style="color: #64748b;">Sem texto definido</div>`;
+            }
+
+            const rawUrl = msg.media_url || '';
+            const safeUrl = sanitizeMediaUrl(rawUrl);
+            const previewHtml = getScheduledMediaPreviewHtml(msg, safeUrl, rawUrl);
+            const captionHtml = msg.message_text
+                ? `<div style="margin-top: 8px;"><strong>Legenda:</strong> ${formatMultilineText(msg.message_text)}</div>`
+                : '';
+            const linkHtml = safeUrl
+                ? `<div style="margin-top: 8px;"><a class="media-link" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener">🔗 Abrir mídia</a></div>`
+                : '';
+            const fallbackUrl = !safeUrl && rawUrl
+                ? `<div style="margin-top: 8px; font-size: 0.85rem; color: #ef4444; word-break: break-all;">${escapeHtml(rawUrl)}</div>`
+                : '';
+
+            return `${previewHtml}${captionHtml}${linkHtml}${fallbackUrl}`;
+        }
+
         // Render scheduled messages
         function renderScheduledMessages(messages) {
             const container = document.getElementById('scheduled-messages-list');
-            
+
             if (!messages || messages.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
@@ -6958,6 +7087,8 @@ HTML_APP = '''<!DOCTYPE html>
                 const nextRun = msg.next_run ? new Date(msg.next_run).toLocaleString('pt-BR') : 'Não calculado';
                 const scheduleInfo = getScheduleInfoText(msg);
                 
+                const messageContent = getScheduledMessageContent(msg);
+
                 return `
                     <div class="scheduled-message-card">
                         <div class="scheduled-message-header">
@@ -6980,18 +7111,12 @@ HTML_APP = '''<!DOCTYPE html>
                             </div>
                         </div>
                         
-                        <div class="message-preview">
-                            ${msg.message_type === 'text' ? 
-                                `<div>${msg.message_text || 'Sem texto'}</div>` :
-                                `<div><strong>Mídia:</strong> ${msg.media_url}</div>
-                                 ${msg.message_text ? `<div><strong>Legenda:</strong> ${msg.message_text}</div>` : ''}`
-                            }
-                        </div>
-                        
+                        <div class="message-preview">${messageContent}</div>
+
                         <div class="next-run">
                             <strong>Próximo envio:</strong> ${nextRun}
                         </div>
-                        
+
                         <div class="schedule-actions">
                             <button class="schedule-btn toggle ${msg.is_active ? 'active' : ''}" 
                                     onclick="toggleScheduledMessage('${msg.id}', ${!msg.is_active})">
