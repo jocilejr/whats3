@@ -219,6 +219,39 @@ def _get_minio_public_base() -> str:
     return f"{scheme}://{_MINIO_ENDPOINT}"
 
 
+def update_minio_runtime_configuration(
+    *,
+    endpoint: Optional[str] = None,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    bucket: Optional[str] = None,
+    public_url: Optional[str] = None,
+) -> None:
+    """Atualiza as configurações do MinIO em tempo de execução."""
+
+    global MINIO_ENDPOINT_RAW, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_PUBLIC_URL
+    global _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT, _MINIO_CLIENT
+
+    if endpoint is not None:
+        MINIO_ENDPOINT_RAW = endpoint or ""
+        _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT = _parse_minio_endpoint(MINIO_ENDPOINT_RAW)
+
+    if public_url is not None:
+        MINIO_PUBLIC_URL = public_url or None
+
+    if access_key is not None:
+        MINIO_ACCESS_KEY = access_key
+
+    if secret_key is not None:
+        MINIO_SECRET_KEY = secret_key
+
+    if bucket is not None:
+        MINIO_BUCKET = bucket
+
+    # Força recriação do cliente com as novas credenciais na próxima utilização
+    _MINIO_CLIENT = None
+
+
 def _ensure_minio_dependency():
     global Minio
     if Minio is not None:
@@ -7083,7 +7116,15 @@ def init_db():
     cursor.execute("PRAGMA cache_size = 1000")
     cursor.execute("PRAGMA temp_store = MEMORY")
     cursor.execute("PRAGMA mmap_size = 268435456")  # 256MB
-    
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+
     # Enhanced tables with better schema
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS instances (
@@ -7217,7 +7258,28 @@ def init_db():
             FOREIGN KEY (campaign_id) REFERENCES campaigns (id) ON DELETE CASCADE
         )
     """)
-    
+
+    try:
+        cursor.execute(
+            "SELECT key, value FROM settings WHERE key LIKE 'minio.%'"
+        )
+        stored_settings = cursor.fetchall()
+        if stored_settings:
+            settings_map = {row[0]: row[1] for row in stored_settings}
+            update_minio_runtime_configuration(
+                endpoint=settings_map.get("minio.url"),
+                public_url=settings_map.get("minio.url"),
+                access_key=settings_map.get("minio.access_key"),
+                secret_key=settings_map.get("minio.secret_key"),
+                bucket=settings_map.get("minio.bucket"),
+            )
+            logger.info("⚙️ Credenciais do MinIO carregadas do banco de dados.")
+    except sqlite3.Error as exc:
+        logger.warning(
+            "⚠️ Não foi possível carregar as configurações do MinIO salvas: %s",
+            exc,
+        )
+
     conn.commit()
     conn.close()
     print("✅ Banco de dados inicializado com suporte para Campanhas e WebSocket")
@@ -8386,6 +8448,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_get_webhooks()
         elif self.path == '/api/scheduled-messages':
             self.handle_get_scheduled_messages()
+        elif self.path == '/api/settings/minio':
+            self.handle_get_minio_settings()
         else:
             self.send_error(404, "Not Found")
     
@@ -8445,6 +8509,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.handle_send_webhook()
         elif self.path == '/api/scheduled-messages':
             self.handle_create_scheduled_message()
+        elif self.path == '/api/settings/minio':
+            self.handle_update_minio_settings()
         else:
             self.send_error(404, "Not Found")
     
@@ -8483,11 +8549,18 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             self.send_error(404, "Not Found")
     
     def send_html_response(self, html_content):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.send_header('Cache-Control', 'no-cache')
-        self.end_headers()
-        self.wfile.write(html_content.encode('utf-8'))
+        try:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(html_content.encode('utf-8'))
+        except (BrokenPipeError, ConnectionResetError):
+            logger.warning(
+                "⚠️ Cliente encerrou a conexão antes de receber a resposta HTML."
+            )
+        except Exception as exc:
+            logger.exception("❌ Erro ao enviar resposta HTML: %s", exc)
     
     def send_json_response(self, data, status_code=200):
         self.send_response(status_code)
@@ -8498,7 +8571,143 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         self.end_headers()
         json_data = json.dumps(data, ensure_ascii=False, indent=2)
         self.wfile.write(json_data.encode('utf-8'))
-    
+
+    def handle_get_minio_settings(self):
+        try:
+            with sqlite3.connect(DB_FILE, timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT key, value FROM settings WHERE key LIKE 'minio.%'"
+                )
+                rows = cursor.fetchall()
+        except sqlite3.Error as exc:
+            logger.error("❌ Erro ao carregar configurações do MinIO: %s", exc)
+            self.send_json_response(
+                {"error": "Não foi possível carregar as credenciais do MinIO."},
+                500,
+            )
+            return
+
+        settings_map = {row[0]: row[1] for row in rows}
+        response_data = {
+            "accessKey": settings_map.get("minio.access_key", MINIO_ACCESS_KEY or ""),
+            "secretKey": settings_map.get("minio.secret_key", MINIO_SECRET_KEY or ""),
+            "bucket": settings_map.get("minio.bucket", MINIO_BUCKET or ""),
+            "url": settings_map.get("minio.url", MINIO_ENDPOINT_RAW or ""),
+        }
+
+        self.send_json_response(response_data)
+
+    def handle_update_minio_settings(self):
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+        except (TypeError, ValueError):
+            self.send_json_response({"error": "Requisição inválida."}, 400)
+            return
+
+        if content_length <= 0:
+            self.send_json_response({"error": "Nenhum dado enviado."}, 400)
+            return
+
+        try:
+            payload = self.rfile.read(content_length)
+            data = json.loads(payload.decode('utf-8'))
+        except json.JSONDecodeError:
+            self.send_json_response({"error": "JSON inválido."}, 400)
+            return
+
+        required_fields = ["accessKey", "secretKey", "bucket", "url"]
+        missing_fields = [
+            field for field in required_fields
+            if not str(data.get(field, "")).strip()
+        ]
+        if missing_fields:
+            self.send_json_response(
+                {
+                    "error": (
+                        "Os campos obrigatórios não foram informados: "
+                        + ", ".join(missing_fields)
+                    )
+                },
+                400,
+            )
+            return
+
+        access_key = data["accessKey"].strip()
+        secret_key = data["secretKey"].strip()
+        bucket = data["bucket"].strip()
+        url = data["url"].strip()
+        if len(url) > 1:
+            url = url.rstrip('/')
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        try:
+            with sqlite3.connect(DB_FILE, timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    ("minio.access_key", access_key, timestamp),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    ("minio.secret_key", secret_key, timestamp),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    ("minio.bucket", bucket, timestamp),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    ("minio.url", url, timestamp),
+                )
+                conn.commit()
+        except sqlite3.Error as exc:
+            logger.exception("❌ Erro ao salvar credenciais do MinIO: %s", exc)
+            self.send_json_response(
+                {"error": "Não foi possível salvar as credenciais do MinIO."},
+                500,
+            )
+            return
+
+        update_minio_runtime_configuration(
+            endpoint=url,
+            public_url=url,
+            access_key=access_key,
+            secret_key=secret_key,
+            bucket=bucket,
+        )
+        logger.info("✅ Credenciais do MinIO atualizadas via API.")
+
+        self.send_json_response(
+            {
+                "success": True,
+                "message": "Credenciais do MinIO atualizadas com sucesso.",
+                "settings": {
+                    "accessKey": access_key,
+                    "secretKey": secret_key,
+                    "bucket": bucket,
+                    "url": url,
+                },
+            }
+        )
+
     def handle_get_instances(self):
         try:
             with sqlite3.connect(DB_FILE, timeout=30) as conn:
