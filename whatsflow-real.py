@@ -12,7 +12,6 @@ import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 import os
 import subprocess
 import sys
@@ -25,6 +24,7 @@ import logging
 import warnings
 from typing import Set, Dict, Any, Optional, Tuple
 from datetime import timedelta
+import pytz
 import io
 import importlib
 import cgi
@@ -7951,7 +7951,7 @@ class MessageScheduler:
         """Check for messages that need to be sent"""
         conn = None
         try:
-            brazil_tz = ZoneInfo('America/Sao_Paulo')
+            brazil_tz = pytz.timezone('America/Sao_Paulo')
             now_brazil = datetime.now(brazil_tz)
 
             # Use standardized database connection with retry logic
@@ -9822,21 +9822,17 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         try:
             from datetime import datetime, timedelta
             import time
-            from zoneinfo import ZoneInfo
+            import pytz
 
-            brazil_tz = ZoneInfo('America/Sao_Paulo')
+            brazil_tz = pytz.timezone('America/Sao_Paulo')
             now = datetime.now(brazil_tz)
             hour, minute = map(int, schedule_time.split(':'))
 
             if schedule_type == 'once':
                 if schedule_date:
                     target_date = datetime.strptime(schedule_date, '%Y-%m-%d')
-                    target_datetime = target_date.replace(
-                        hour=hour,
-                        minute=minute,
-                        second=0,
-                        microsecond=0,
-                        tzinfo=brazil_tz,
+                    target_datetime = brazil_tz.localize(
+                        target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
                     )
                     if target_datetime > now:
                         return target_datetime.isoformat()
@@ -10043,9 +10039,9 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
             
             # Calculate next run using Brazil timezone
             from datetime import datetime, timedelta
-            from zoneinfo import ZoneInfo
-
-            brazil_tz = ZoneInfo('America/Sao_Paulo')
+            import pytz
+            
+            brazil_tz = pytz.timezone('America/Sao_Paulo')
             now_brazil = datetime.now(brazil_tz)
             
             # Parse schedule time
@@ -10057,13 +10053,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                     return
                     
                 target_date = datetime.strptime(schedule_date, '%Y-%m-%d')
-                target_datetime = target_date.replace(
-                    hour=hour,
-                    minute=minute,
-                    second=0,
-                    microsecond=0,
-                    tzinfo=brazil_tz,
-                )
+                target_datetime = brazil_tz.localize(target_date.replace(hour=hour, minute=minute, second=0))
                 
                 if target_datetime <= now_brazil:
                     self.send_json_response({"error": "Data/horário deve ser no futuro"}, 400)
