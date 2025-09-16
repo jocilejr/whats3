@@ -74,8 +74,8 @@ WEBSOCKET_PORT = 8890
 DEFAULT_MINIO_ENDPOINT = "https://minio.auto-atendimento.digital"
 
 MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT", DEFAULT_MINIO_ENDPOINT)
-MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
-MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4")
+MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "")
+MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "")
 MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "meu-bucket")
 MINIO_PUBLIC_URL = os.environ.get("MINIO_PUBLIC_URL")
 _MINIO_CLIENT = None
@@ -152,10 +152,8 @@ def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
 def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
     """Combine DB stored credentials with environment fallbacks."""
 
-    access_key = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
-    secret_key = os.environ.get(
-        "MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4"
-    )
+    access_key = os.environ.get("MINIO_ACCESS_KEY", "")
+    secret_key = os.environ.get("MINIO_SECRET_KEY", "")
     bucket = os.environ.get("MINIO_BUCKET", "meu-bucket")
     endpoint_raw = os.environ.get("MINIO_ENDPOINT", DEFAULT_MINIO_ENDPOINT)
     public_url = os.environ.get("MINIO_PUBLIC_URL")
