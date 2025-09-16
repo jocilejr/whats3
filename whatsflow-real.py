@@ -28,6 +28,7 @@ import pytz
 import io
 import importlib
 import cgi
+import mimetypes
 
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="cgi")
 
@@ -71,7 +72,9 @@ DB_FILE = "whatsflow.db"
 PORT = 8889
 WEBSOCKET_PORT = 8890
 
-MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+DEFAULT_MINIO_ENDPOINT = "https://minio.auto-atendimento.digital"
+
+MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT", DEFAULT_MINIO_ENDPOINT)
 MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4")
 MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "meu-bucket")
@@ -80,6 +83,37 @@ _MINIO_CLIENT = None
 _MINIO_ENDPOINT = None
 _MINIO_SECURE_DEFAULT = False
 Minio = None
+_MINIO_POLICY_CHECKED = False
+_MINIO_PRESIGNED_WARNING = False
+_MINIO_LEGACY_ENDPOINT_WARNED = False
+
+
+def _normalize_endpoint_for_comparison(value: Optional[str]) -> str:
+    """Normalize endpoints so different legacy variants can be compared."""
+
+    if not value:
+        return ""
+
+    normalized = value.strip().lower()
+    while normalized.endswith("/"):
+        normalized = normalized[:-1]
+    return normalized
+
+
+LEGACY_MINIO_ENDPOINTS = {
+    "localhost:9000",
+    "http://localhost:9000",
+    "https://localhost:9000",
+    "127.0.0.1:9000",
+    "http://127.0.0.1:9000",
+    "https://127.0.0.1:9000",
+}
+
+
+LEGACY_MINIO_ENDPOINT_FINGERPRINTS = {
+    _normalize_endpoint_for_comparison(candidate)
+    for candidate in LEGACY_MINIO_ENDPOINTS
+}
 
 
 def ensure_minio_credentials_table() -> None:
@@ -120,37 +154,109 @@ def _fetch_minio_credentials_from_db() -> Optional[Dict[str, str]]:
     return None
 
 
+def _compute_minio_host(endpoint: str) -> Tuple[str, bool]:
+    parsed = urllib.parse.urlparse(endpoint)
+    host = parsed.netloc or parsed.path
+    if not host:
+        host = "localhost:9000"
+    secure = parsed.scheme.lower() == "https"
+    return host, secure
+
+
+DEFAULT_MINIO_HOST, DEFAULT_MINIO_SECURE = _compute_minio_host(DEFAULT_MINIO_ENDPOINT)
+
+
 def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
     if not endpoint:
-        return "localhost:9000", False
+        return DEFAULT_MINIO_HOST, DEFAULT_MINIO_SECURE
     secure = False
     cleaned = endpoint
     if "://" in endpoint:
         parsed = urllib.parse.urlparse(endpoint)
         secure = parsed.scheme.lower() == "https"
         cleaned = parsed.netloc or parsed.path
-    return cleaned or "localhost:9000", secure
+    if not cleaned:
+        return DEFAULT_MINIO_HOST, secure or DEFAULT_MINIO_SECURE
+    return cleaned, secure
 
 
 def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
-    """Combine DB stored credentials with environment fallbacks."""
+    """Combine environment overrides with persisted MinIO credentials."""
 
-    access_key = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
-    secret_key = os.environ.get(
-        "MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4"
+    global _MINIO_LEGACY_ENDPOINT_WARNED
+
+    default_access = "03CnLEOqVp65uzt9dbpp"
+    default_secret = "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4"
+    default_bucket = "meu-bucket"
+
+    env_access = os.environ.get("MINIO_ACCESS_KEY")
+    env_secret = os.environ.get("MINIO_SECRET_KEY")
+    env_bucket = os.environ.get("MINIO_BUCKET")
+    env_endpoint_raw = os.environ.get("MINIO_ENDPOINT")
+    env_endpoint_trimmed = (
+        env_endpoint_raw.strip() if isinstance(env_endpoint_raw, str) else None
     )
-    bucket = os.environ.get("MINIO_BUCKET", "meu-bucket")
-    endpoint_raw = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
-    public_url = os.environ.get("MINIO_PUBLIC_URL")
+    env_public = os.environ.get("MINIO_PUBLIC_URL")
 
-    stored = _fetch_minio_credentials_from_db()
-    if stored:
-        endpoint_raw = stored.get("url") or endpoint_raw
-        access_key = stored.get("access_key") or access_key
-        secret_key = stored.get("secret_key") or secret_key
-        bucket = stored.get("bucket") or bucket
-        if not public_url:
-            public_url = stored.get("url") or public_url
+    stored_raw = _fetch_minio_credentials_from_db() or {}
+
+    stored: Dict[str, Optional[str]] = {}
+    for key in ("access_key", "secret_key", "bucket", "url"):
+        value = stored_raw.get(key)
+        if isinstance(value, str):
+            trimmed = value.strip()
+            stored[key] = trimmed if trimmed else None
+        else:
+            stored[key] = None
+
+    stored_endpoint = stored.get("url")
+    stored_endpoint_normalized = _normalize_endpoint_for_comparison(stored_endpoint)
+    stored_access = stored.get("access_key")
+    stored_secret = stored.get("secret_key")
+    stored_bucket = stored.get("bucket")
+
+    legacy_endpoint = (
+        stored_endpoint is not None
+        and stored_access == default_access
+        and stored_secret == default_secret
+        and stored_bucket == default_bucket
+        and stored_endpoint_normalized in LEGACY_MINIO_ENDPOINT_FINGERPRINTS
+    )
+
+    stored_endpoint_is_legacy = (
+        stored_endpoint is not None
+        and stored_endpoint_normalized in LEGACY_MINIO_ENDPOINT_FINGERPRINTS
+    )
+
+    if legacy_endpoint:
+        stored_endpoint = None
+    elif stored_endpoint_is_legacy and not env_endpoint_trimmed:
+        if not _MINIO_LEGACY_ENDPOINT_WARNED:
+            logging.getLogger(__name__).info(
+                "Ignorando endpoint legado do MinIO '%s'; utilizando o padrão '%s'.",
+                stored_endpoint,
+                DEFAULT_MINIO_ENDPOINT,
+            )
+            _MINIO_LEGACY_ENDPOINT_WARNED = True
+        stored_endpoint = None
+
+    def _choose(env_value: Optional[str], stored_value: Optional[str], default: str) -> str:
+        if env_value is not None:
+            trimmed_env = env_value.strip()
+            if trimmed_env != "":
+                return trimmed_env
+        if stored_value:
+            return stored_value
+        return default
+
+    endpoint_raw = _choose(env_endpoint_raw, stored_endpoint, DEFAULT_MINIO_ENDPOINT)
+    access_key = _choose(env_access, stored_access, default_access)
+    secret_key = _choose(env_secret, stored_secret, default_secret)
+    bucket = _choose(env_bucket, stored_bucket, default_bucket)
+
+    public_url: Optional[str] = None
+    if env_public is not None and env_public.strip() != "":
+        public_url = env_public.strip()
 
     return endpoint_raw, access_key, secret_key, bucket, public_url
 
@@ -260,11 +366,88 @@ def _ensure_minio_dependency():
     try:
         Minio = importlib.import_module("minio").Minio
         return Minio
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "Biblioteca 'minio' não encontrada. "
-            "Instale-a manualmente executando: python3 -m pip install minio"
-        ) from exc
+    except ModuleNotFoundError:
+        print("📦 Instalando dependência 'minio' automaticamente...")
+        installation_succeeded = False
+        pep668_detected = False
+        last_error_output = ""
+        install_variants = [
+            [],
+            ["--user"],
+        ]
+
+        idx = 0
+        while idx < len(install_variants):
+            extra_args = install_variants[idx]
+            cmd = [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                *extra_args,
+                "minio",
+            ]
+            cmd_display = " ".join(cmd)
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+                installation_succeeded = True
+                break
+            except subprocess.CalledProcessError as exc:
+                output = "\n".join(
+                    list(
+                        filter(
+                            None,
+                            [
+                                (exc.stdout or "").strip(),
+                                (exc.stderr or "").strip(),
+                            ],
+                        )
+                    )
+                )
+                last_error_output = output
+                if output:
+                    print(f"⚠️ Falha ao executar '{cmd_display}':\n{output}\n")
+
+                pep668_error = False
+                if "externally-managed-environment" in output or "externally managed environment" in output:
+                    pep668_detected = True
+                    pep668_error = True
+
+                if pep668_error and all("--break-system-packages" not in variant for variant in install_variants):
+                    print(
+                        "⚠️ Ambiente gerenciado detectado (PEP 668). Tentando novamente com "
+                        "'--break-system-packages'."
+                    )
+                    install_variants.append(["--break-system-packages"])
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    "Não foi possível localizar o executável do pip para instalar 'minio'."
+                ) from exc
+            finally:
+                idx += 1
+
+        if not installation_succeeded:
+            message = "Não foi possível instalar a biblioteca 'minio'."
+            if pep668_detected:
+                message += (
+                    " O Python deste sistema é gerenciado externamente (PEP 668). "
+                    "Crie um ambiente virtual com 'python3 -m venv .venv' e execute novamente o script, "
+                    "ou rode 'python3 -m pip install --break-system-packages minio'."
+                )
+            else:
+                message += " Instale-a manualmente executando: python3 -m pip install minio"
+            if last_error_output:
+                message += f"\nSaída do pip:\n{last_error_output}"
+            raise RuntimeError(message)
+
+        try:
+            Minio = importlib.import_module("minio").Minio
+            return Minio
+        except ModuleNotFoundError as exc:  # pragma: no cover - fallback inesperado
+            raise RuntimeError(
+                "A biblioteca 'minio' ainda não pôde ser carregada após a instalação automática. "
+                "Verifique o ambiente Python e tente novamente."
+            ) from exc
 
 
 def get_minio_client():
@@ -328,16 +511,77 @@ def resolve_baileys_url() -> str:
 API_BASE_URL = resolve_baileys_url()
 
 
+def _apply_public_read_policy(client) -> None:
+    global _MINIO_POLICY_CHECKED
+    if _MINIO_POLICY_CHECKED:
+        return
+
+    _MINIO_POLICY_CHECKED = True
+    policy_document = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": ["*"]},
+                "Action": ["s3:GetObject"],
+                "Resource": [f"arn:aws:s3:::{MINIO_BUCKET}/*"],
+            }
+        ],
+    }
+
+    try:
+        client.set_bucket_policy(MINIO_BUCKET, json.dumps(policy_document))
+    except Exception as exc:  # pragma: no cover - dependente de permissões externas
+        logging.getLogger(__name__).warning(
+            "Não foi possível aplicar política pública ao bucket '%s': %s",
+            MINIO_BUCKET,
+            exc,
+        )
+
+
 def ensure_minio_bucket(client=None):
     client = client or get_minio_client()
     try:
         if not client.bucket_exists(MINIO_BUCKET):
             client.make_bucket(MINIO_BUCKET)
     except Exception as exc:
+        error_message = str(exc)
+        if "S3 API Requests must be made to API port" in error_message:
+            hint = (
+                " Verifique se o endpoint aponta para a porta da API (geralmente ':9000'). "
+                f"Endpoint atual: {MINIO_ENDPOINT_RAW or _MINIO_ENDPOINT}."
+            )
+            error_message += hint
         raise RuntimeError(
-            f"Não foi possível preparar o bucket '{MINIO_BUCKET}' no MinIO: {exc}"
+            f"Não foi possível preparar o bucket '{MINIO_BUCKET}' no MinIO: {error_message}"
         ) from exc
+    _apply_public_read_policy(client)
     return client
+
+
+def _generate_minio_file_url(client, object_name: str) -> str:
+    global _MINIO_PRESIGNED_WARNING
+
+    if MINIO_PUBLIC_URL:
+        base = MINIO_PUBLIC_URL.rstrip("/")
+        return f"{base}/{MINIO_BUCKET}/{object_name}"
+
+    try:
+        return client.presigned_get_object(
+            MINIO_BUCKET,
+            object_name,
+            expires=timedelta(days=7),
+        )
+    except Exception as exc:  # pragma: no cover - depende da configuração externa
+        if not _MINIO_PRESIGNED_WARNING:
+            logging.getLogger(__name__).warning(
+                "Não foi possível gerar URL temporária para o objeto '%s': %s",
+                object_name,
+                exc,
+            )
+            _MINIO_PRESIGNED_WARNING = True
+
+    return f"{_get_minio_public_base()}/{MINIO_BUCKET}/{object_name}"
 
 
 def upload_to_minio(filename: str, data: bytes) -> str:
@@ -345,11 +589,18 @@ def upload_to_minio(filename: str, data: bytes) -> str:
     name = filename or "arquivo"
     object_name = f"{int(time.time() * 1000)}{os.path.splitext(name)[1]}"
     data_stream = io.BytesIO(data)
+    content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
     try:
-        client.put_object(MINIO_BUCKET, object_name, data_stream, len(data))
+        client.put_object(
+            MINIO_BUCKET,
+            object_name,
+            data_stream,
+            len(data),
+            content_type=content_type,
+        )
     except Exception as exc:
         raise RuntimeError(f"Falha ao enviar arquivo para o MinIO: {exc}") from exc
-    return f"{_get_minio_public_base()}/{MINIO_BUCKET}/{object_name}"
+    return _generate_minio_file_url(client, object_name)
 
 # WebSocket clients management
 if WEBSOCKETS_AVAILABLE:
@@ -3586,6 +3837,7 @@ HTML_APP = '''<!DOCTYPE html>
                     <option value="image">🖼️ Imagem</option>
                     <option value="audio">🎵 Áudio</option>
                     <option value="video">🎥 Vídeo</option>
+                    <option value="document">📄 Documento</option>
                 </select>
             </div>
             
@@ -3755,6 +4007,9 @@ HTML_APP = '''<!DOCTYPE html>
                 <button class="btn btn-secondary campaign-nav-btn active" onclick="showCampaignTab('groups')" id="groupsTab">
                     👥 Grupos
                 </button>
+                <button class="btn btn-secondary campaign-nav-btn" onclick="showCampaignTab('media')" id="mediaTab">
+                    🖼️ Mídia
+                </button>
                 <button class="btn btn-secondary campaign-nav-btn" onclick="showCampaignTab('schedule')" id="scheduleTab">
                     ⏰ Programar
                 </button>
@@ -3762,7 +4017,7 @@ HTML_APP = '''<!DOCTYPE html>
                     📋 Ver Programações
                 </button>
             </div>
-            
+
             <!-- Groups Tab -->
             <div id="campaignGroupsTab" class="campaign-tab active">
                 <div style="margin-bottom: 15px;">
@@ -3790,7 +4045,50 @@ HTML_APP = '''<!DOCTYPE html>
                     </div>
                 </div>
             </div>
-            
+
+            <!-- Media Tab -->
+            <div id="campaignMediaTab" class="campaign-tab" style="display: none;">
+                <div style="margin-bottom: 12px; color: #475569; font-size: 0.95rem;">
+                    <p>Envie arquivos para o MinIO e gere automaticamente a <code>mediaUrl</code> usada pelo Baileys nas campanhas em grupo.</p>
+                </div>
+                <input type="file" id="campaignMediaFile" style="display:none" accept="image/*,video/*,audio/*,application/*"
+                       onchange="uploadMediaFile(this.files[0], 'campaignMediaUrl', 'campaignMediaUploadStatus')">
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('campaignMediaFile').click()">
+                        📁 Selecionar Arquivo
+                    </button>
+                    <span style="font-size: 0.85rem; color: #64748b;">O link será preenchido automaticamente após o envio.</span>
+                </div>
+                <p id="campaignMediaUploadStatus" style="margin-bottom: 15px; font-size: 0.85rem; color: #64748b;"></p>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">URL da Mídia (mediaUrl)</label>
+                    <input type="text" id="campaignMediaUrl" class="form-input"
+                           placeholder="A URL gerada aparecerá aqui automaticamente"
+                           oninput="updateCampaignMediaPreview()">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Tipo da Mídia</label>
+                    <select id="campaignMediaType" class="form-input" onchange="updateCampaignMediaPreview()">
+                        <option value="image">🖼️ Imagem</option>
+                        <option value="video">🎥 Vídeo</option>
+                        <option value="audio">🎵 Áudio</option>
+                        <option value="document">📄 Documento</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Legenda/Texto (opcional)</label>
+                    <textarea id="campaignMediaCaption" class="form-input"
+                              placeholder="Adicione uma legenda para acompanhar a mídia..."
+                              style="height: 70px; resize: vertical;"></textarea>
+                </div>
+                <div id="campaignMediaPreview" style="margin-bottom: 20px; display: none;"></div>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                    <button type="button" class="btn btn-primary" onclick="applyCampaignMediaToSchedule()">Usar no agendamento</button>
+                    <button type="button" class="btn btn-secondary" onclick="copyCampaignMediaUrl()">Copiar URL</button>
+                    <button type="button" class="btn" onclick="clearCampaignMediaSelection()">Limpar</button>
+                </div>
+            </div>
+
             <!-- Schedule Tab -->
             <div id="campaignScheduleTab" class="campaign-tab" style="display: none;">
                 <div style="text-align: center; padding: 20px;">
@@ -3822,6 +4120,7 @@ HTML_APP = '''<!DOCTYPE html>
         let statusPollingInterval = null;
         let minioSettingsLoaded = false;
         let minioSettingsLoading = false;
+        let currentCampaignMediaUrl = '';
 
         function selectSettingsTab(tabName) {
             const tabButtons = document.querySelectorAll('[data-settings-tab]');
@@ -4974,6 +5273,9 @@ HTML_APP = '''<!DOCTYPE html>
                     targetInput.dispatchEvent(new Event('change', { bubbles: true }));
                     if (targetFieldId === 'scheduleMediaUrl') {
                         previewMedia();
+                    } else if (targetFieldId === 'campaignMediaUrl') {
+                        currentCampaignMediaUrl = data.url;
+                        updateCampaignMediaPreview();
                     }
                 }
 
@@ -4990,6 +5292,9 @@ HTML_APP = '''<!DOCTYPE html>
                 } else if (targetFieldId === 'scheduleMediaUrl') {
                     const scheduleFileInput = document.getElementById('scheduleMediaFile');
                     if (scheduleFileInput) scheduleFileInput.value = '';
+                } else if (targetFieldId === 'campaignMediaUrl') {
+                    const campaignFileInput = document.getElementById('campaignMediaFile');
+                    if (campaignFileInput) campaignFileInput.value = '';
                 }
             } catch (err) {
                 console.error(err);
@@ -6647,8 +6952,15 @@ HTML_APP = '''<!DOCTYPE html>
                         <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o áudio</div>
                     </div>
                 `;
+            } else if (messageType === 'document') {
+                previewHtml = `
+                    <div style="background: #f1f5f9; padding: 16px; border-radius: 6px;">
+                        <div style="font-weight: 600; margin-bottom: 6px;">📄 Documento pronto para envio</div>
+                        <a href="${url}" target="_blank" style="color: #0369a1; word-break: break-all;">${url}</a>
+                    </div>
+                `;
             }
-            
+
             preview.innerHTML = previewHtml;
             preview.style.display = 'block';
         }
@@ -7172,23 +7484,26 @@ HTML_APP = '''<!DOCTYPE html>
             selectedCampaignInstanceId = '';
             document.getElementById('manageCampaignTitle').textContent = `🎯 ${campaignName}`;
             document.getElementById('manageCampaignModal').style.display = 'flex';
-            
+
             // Load all instances for group selection
             loadCampaignInstancesForGroups();
-            
+
             // Load existing campaign groups
             loadExistingCampaignGroups(campaignId);
-            
+
+            resetCampaignMediaManager();
+
             // Show groups tab by default
             showCampaignTab('groups');
         }
-        
+
         // Hide campaign management modal
         function hideCampaignModal() {
             document.getElementById('manageCampaignModal').style.display = 'none';
             currentCampaignId = null;
             selectedCampaignGroups = [];
             selectedCampaignInstanceId = '';
+            resetCampaignMediaManager();
         }
         
         // Show campaign tab
@@ -7214,7 +7529,178 @@ HTML_APP = '''<!DOCTYPE html>
                 loadCampaignScheduledMessages();
             }
         }
-        
+
+        function resetCampaignMediaManager() {
+            currentCampaignMediaUrl = '';
+            const urlInput = document.getElementById('campaignMediaUrl');
+            if (urlInput) {
+                urlInput.value = '';
+            }
+            const captionInput = document.getElementById('campaignMediaCaption');
+            if (captionInput) {
+                captionInput.value = '';
+            }
+            const typeSelect = document.getElementById('campaignMediaType');
+            if (typeSelect) {
+                typeSelect.value = 'image';
+            }
+            const statusElement = document.getElementById('campaignMediaUploadStatus');
+            if (statusElement) {
+                statusElement.textContent = '';
+                statusElement.style.color = '#64748b';
+            }
+            const preview = document.getElementById('campaignMediaPreview');
+            if (preview) {
+                preview.innerHTML = '';
+                preview.style.display = 'none';
+            }
+            const fileInput = document.getElementById('campaignMediaFile');
+            if (fileInput) {
+                fileInput.value = '';
+            }
+        }
+
+        function updateCampaignMediaPreview() {
+            const urlInput = document.getElementById('campaignMediaUrl');
+            const preview = document.getElementById('campaignMediaPreview');
+            const typeSelect = document.getElementById('campaignMediaType');
+
+            if (!preview || !typeSelect) {
+                return;
+            }
+
+            const url = (urlInput && urlInput.value ? urlInput.value : '').trim();
+            const type = typeSelect.value || 'image';
+
+            if (!url) {
+                preview.innerHTML = '';
+                preview.style.display = 'none';
+                currentCampaignMediaUrl = '';
+                return;
+            }
+
+            currentCampaignMediaUrl = url;
+
+            let previewHtml = '';
+
+            if (type === 'image') {
+                previewHtml = `
+                    <div style="text-align: center;">
+                        <img src="${url}" alt="Preview" style="max-width: 100%; max-height: 220px; border-radius: 6px;"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar a imagem</div>
+                    </div>
+                `;
+            } else if (type === 'video') {
+                previewHtml = `
+                    <div style="text-align: center;">
+                        <video controls style="max-width: 100%; max-height: 220px; border-radius: 6px;"
+                               onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <source src="${url}">
+                            Seu navegador não suporta vídeos.
+                        </video>
+                        <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o vídeo</div>
+                    </div>
+                `;
+            } else if (type === 'audio') {
+                previewHtml = `
+                    <div style="text-align: center;">
+                        <audio controls style="width: 100%;"
+                               onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <source src="${url}">
+                            Seu navegador não suporta áudio.
+                        </audio>
+                        <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o áudio</div>
+                    </div>
+                `;
+            } else {
+                previewHtml = `
+                    <div style="background: #f1f5f9; padding: 16px; border-radius: 6px;">
+                        <div style="font-weight: 600; margin-bottom: 6px;">📄 Documento disponível</div>
+                        <a href="${url}" target="_blank" style="color: #0369a1; word-break: break-all;">${url}</a>
+                    </div>
+                `;
+            }
+
+            preview.innerHTML = previewHtml;
+            preview.style.display = 'block';
+        }
+
+        function applyCampaignMediaToSchedule() {
+            const urlInput = document.getElementById('campaignMediaUrl');
+            const typeSelect = document.getElementById('campaignMediaType');
+            const captionInput = document.getElementById('campaignMediaCaption');
+            const url = (urlInput && urlInput.value ? urlInput.value : '').trim();
+
+            if (!url) {
+                alert('❌ Gere ou informe uma URL de mídia primeiro.');
+                return;
+            }
+
+            const scheduleTypeSelect = document.getElementById('scheduleMessageType');
+            const scheduleUrlInput = document.getElementById('scheduleMediaUrl');
+            const scheduleCaption = document.getElementById('scheduleMediaCaption');
+            const uploadStatus = document.getElementById('scheduleMediaUploadStatus');
+
+            if (scheduleTypeSelect) {
+                const mediaType = typeSelect ? typeSelect.value : 'image';
+                if (![...scheduleTypeSelect.options].some(opt => opt.value === mediaType)) {
+                    const option = document.createElement('option');
+                    option.value = mediaType;
+                    option.textContent = '📄 Documento';
+                    scheduleTypeSelect.appendChild(option);
+                }
+                scheduleTypeSelect.value = mediaType;
+                handleMessageTypeChange();
+            }
+
+            if (scheduleUrlInput) {
+                scheduleUrlInput.value = url;
+                scheduleUrlInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            if (scheduleCaption && captionInput) {
+                scheduleCaption.value = captionInput.value;
+            }
+
+            if (uploadStatus) {
+                uploadStatus.style.color = '#16a34a';
+                uploadStatus.textContent = 'URL aplicada a partir da aba de mídia.';
+            }
+
+            previewMedia();
+            showCampaignTab('schedule');
+        }
+
+        async function copyCampaignMediaUrl() {
+            const url = (document.getElementById('campaignMediaUrl')?.value || '').trim();
+            if (!url) {
+                alert('❌ Nenhuma URL disponível para copiar.');
+                return;
+            }
+
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(url);
+                } else {
+                    const tempInput = document.createElement('input');
+                    tempInput.value = url;
+                    document.body.appendChild(tempInput);
+                    tempInput.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(tempInput);
+                }
+                alert('✅ URL copiada para a área de transferência!');
+            } catch (error) {
+                console.error('Erro ao copiar URL:', error);
+                alert('❌ Não foi possível copiar a URL automaticamente. Copie manualmente.');
+            }
+        }
+
+        function clearCampaignMediaSelection() {
+            resetCampaignMediaManager();
+        }
+
         // Load campaign instances for group selection
         async function loadCampaignInstancesForGroups() {
             const select = document.getElementById('campaignGroupsInstance');
