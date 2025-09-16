@@ -153,39 +153,24 @@ def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
 
 
 def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
-fix-minio-upload-connection-error-ss2z8w
-    """Combine environment overrides with persisted MinIO credentials."""
+    """Combine DB stored credentials with environment fallbacks."""
 
-    default_access = "03CnLEOqVp65uzt9dbpp"
-    default_secret = "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4"
-    default_bucket = "meu-bucket"
+    access_key = os.environ.get("MINIO_ACCESS_KEY", "03CnLEOqVp65uzt9dbpp")
+    secret_key = os.environ.get(
+        "MINIO_SECRET_KEY", "oR5eC5wlm2cVE93xNbhLdLpxsm6eapxY43nolmf4"
+    )
+    bucket = os.environ.get("MINIO_BUCKET", "meu-bucket")
+    endpoint_raw = os.environ.get("MINIO_ENDPOINT", DEFAULT_MINIO_ENDPOINT)
+    public_url = os.environ.get("MINIO_PUBLIC_URL")
 
-    env_access = os.environ.get("MINIO_ACCESS_KEY")
-    env_secret = os.environ.get("MINIO_SECRET_KEY")
-    env_bucket = os.environ.get("MINIO_BUCKET")
-    env_endpoint = os.environ.get("MINIO_ENDPOINT")
-    env_public = os.environ.get("MINIO_PUBLIC_URL")
-
-    stored = _fetch_minio_credentials_from_db() or {}
-
-    def _choose(env_value: Optional[str], stored_value: Optional[str], default: str) -> str:
-        if env_value is not None:
-            trimmed_env = env_value.strip()
-            if trimmed_env != "":
-                return trimmed_env
-        if stored_value:
-            return stored_value
-        return default
-
-    endpoint_raw = _choose(env_endpoint, stored.get("url"), DEFAULT_MINIO_ENDPOINT)
-    access_key = _choose(env_access, stored.get("access_key"), default_access)
-    secret_key = _choose(env_secret, stored.get("secret_key"), default_secret)
-    bucket = _choose(env_bucket, stored.get("bucket"), default_bucket)
-
-    public_url: Optional[str] = None
-    if env_public is not None and env_public.strip() != "":
-        public_url = env_public.strip()
-
+    stored = _fetch_minio_credentials_from_db()
+    if stored:
+        endpoint_raw = stored.get("url") or endpoint_raw
+        access_key = stored.get("access_key") or access_key
+        secret_key = stored.get("secret_key") or secret_key
+        bucket = stored.get("bucket") or bucket
+        if not public_url:
+            public_url = stored.get("url") or public_url
 
     return endpoint_raw, access_key, secret_key, bucket, public_url
 
@@ -314,8 +299,7 @@ def _ensure_minio_dependency():
         Minio = importlib.import_module("minio").Minio
         return Minio
     except ModuleNotFoundError:
-fix-minio-upload-connection-error-ss2z8w
-
+fix-minio-upload-connection-error-hssbxq
         print("📦 Instalando dependência 'minio' automaticamente...")
         installation_succeeded = False
         pep668_detected = False
@@ -325,11 +309,7 @@ fix-minio-upload-connection-error-ss2z8w
             ["--user"],
         ]
 
-fix-minio-upload-connection-error-ss2z8w
-        idx = 0
-        while idx < len(install_variants):
-            extra_args = install_variants[idx]
-
+        for extra_args in install_variants:
             cmd = [
                 sys.executable,
                 "-m",
@@ -358,28 +338,12 @@ fix-minio-upload-connection-error-ss2z8w
                 last_error_output = output
                 if output:
                     print(f"⚠️ Falha ao executar '{cmd_display}':\n{output}\n")
-fix-minio-upload-connection-error-ss2z8w
-
-                pep668_error = False
                 if "externally-managed-environment" in output or "externally managed environment" in output:
                     pep668_detected = True
-                    pep668_error = True
-
-                if pep668_error and all("--break-system-packages" not in variant for variant in install_variants):
-                    print(
-                        "⚠️ Ambiente gerenciado detectado (PEP 668). Tentando novamente com "
-                        "'--break-system-packages'."
-                    )
-                    install_variants.append(["--break-system-packages"])
-
             except FileNotFoundError as exc:
                 raise RuntimeError(
                     "Não foi possível localizar o executável do pip para instalar 'minio'."
                 ) from exc
-fix-minio-upload-connection-error-ss2z8w
-            finally:
-                idx += 1
-
 
         if not installation_succeeded:
             message = "Não foi possível instalar a biblioteca 'minio'."
@@ -395,16 +359,15 @@ fix-minio-upload-connection-error-ss2z8w
                 message += f"\nSaída do pip:\n{last_error_output}"
             raise RuntimeError(message)
 
-fix-minio-upload-connection-error-ss2z8w
+
         try:
             Minio = importlib.import_module("minio").Minio
             return Minio
-
+fix-minio-upload-connection-error-hssbxq
         except ModuleNotFoundError as exc:  # pragma: no cover - fallback inesperado
             raise RuntimeError(
                 "A biblioteca 'minio' ainda não pôde ser carregada após a instalação automática. "
                 "Verifique o ambiente Python e tente novamente."
-fix-minio-upload-connection-error-ss2z8w
 
             ) from exc
 
@@ -509,7 +472,7 @@ def ensure_minio_bucket(client=None):
         raise RuntimeError(
             f"Não foi possível preparar o bucket '{MINIO_BUCKET}' no MinIO: {exc}"
         ) from exc
-fix-minio-upload-connection-error-ss2z8w
+ codex/fix-minio-upload-connection-error-hssbxq
     _apply_public_read_policy(client)
 
     return client
@@ -556,7 +519,7 @@ def upload_to_minio(filename: str, data: bytes) -> str:
         )
     except Exception as exc:
         raise RuntimeError(f"Falha ao enviar arquivo para o MinIO: {exc}") from exc
-fix-minio-upload-connection-error-ss2z8w
+ fix-minio-upload-connection-error-hssbxq
     return _generate_minio_file_url(client, object_name)
 
 
