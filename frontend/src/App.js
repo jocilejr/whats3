@@ -4,7 +4,6 @@ import axios from 'axios';
 import FlowEditor from './components/FlowEditor';
 import FlowList from './components/FlowList';
 import MessagesCenter from './components/MessagesCenter';
-import Settings from './components/Settings';
 import WhatsAppInstances from './components/WhatsAppInstances';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -61,19 +60,12 @@ const Navigation = ({ currentView, onViewChange }) => {
           <span className="nav-icon">💬</span>
           <span>Mensagens</span>
         </button>
-        <button
+        <button 
           className={`nav-item ${currentView === 'instances' ? 'active' : ''}`}
           onClick={() => onViewChange('instances')}
         >
           <span className="nav-icon">📱</span>
           <span>Instâncias</span>
-        </button>
-        <button
-          className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
-          onClick={() => onViewChange('settings')}
-        >
-          <span className="nav-icon">⚙️</span>
-          <span>Configurações</span>
         </button>
       </div>
     </nav>
@@ -445,10 +437,6 @@ function App() {
 
           {currentView === 'instances' && (
             <WhatsAppInstances />
-          )}
-
-          {currentView === 'settings' && (
-            <Settings />
           )}
         </div>
       </main>
