@@ -108,7 +108,7 @@ const Settings = () => {
 
   return (
     <div className="settings">
-      <h2>Configurações</h2>
+      <h2>⚙️ Configurações</h2>
       <div className="settings-tabs">
         <div
           className="settings-tablist"
@@ -127,7 +127,7 @@ const Settings = () => {
               setStatus(null);
             }}
           >
-            Credenciais
+            🔐 Credenciais
           </button>
         </div>
 
@@ -147,7 +147,7 @@ const Settings = () => {
                 className={`settings-subtab ${activeSubSection === 'minio' ? 'active' : ''}`}
                 onClick={() => setActiveSubSection('minio')}
               >
-                Credenciais MinIO
+                📦 Credenciais Minio
               </button>
             </div>
 
@@ -158,7 +158,7 @@ const Settings = () => {
                 id="settings-panel-minio"
                 aria-labelledby="settings-subtab-minio"
               >
-                <h3>Credenciais MinIO</h3>
+                <h3>📦 Credenciais Minio</h3>
                 <p className="settings-description">
                   Configure as credenciais utilizadas para acessar o servidor Minio responsável
                   pelo armazenamento de arquivos e mídias.
