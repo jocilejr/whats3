@@ -6696,52 +6696,108 @@ HTML_APP = '''<!DOCTYPE html>
             }
         }
         
-        // Preview media
-        function previewMedia() {
-            const url = document.getElementById('scheduleMediaUrl').value;
-            const preview = document.getElementById('mediaPreview');
-            const messageType = document.getElementById('scheduleMessageType').value;
-            
-            if (!url) {
-                preview.style.display = 'none';
-                return;
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
             }
-            
-            let previewHtml = '';
-            
-            if (messageType === 'image') {
-                previewHtml = `
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function buildMediaEmbed(url, type) {
+            if (!url) {
+                return '';
+            }
+
+            const safeUrl = escapeHtml(url);
+
+            if (type === 'image') {
+                return `
                     <div style="text-align: center;">
-                        <img src="${url}" alt="Preview" style="max-width: 100%; max-height: 200px; border-radius: 6px;"
+                        <img src="${safeUrl}" alt="Pré-visualização"
+                             style="max-width: 100%; max-height: 200px; border-radius: 6px;"
                              onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                         <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar a imagem</div>
                     </div>
                 `;
-            } else if (messageType === 'video') {
-                previewHtml = `
+            }
+
+            if (type === 'video') {
+                return `
                     <div style="text-align: center;">
                         <video controls style="max-width: 100%; max-height: 200px; border-radius: 6px;"
                                onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                            <source src="${url}">
+                            <source src="${safeUrl}">
                             Seu navegador não suporta vídeos.
                         </video>
                         <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o vídeo</div>
                     </div>
                 `;
-            } else if (messageType === 'audio') {
-                previewHtml = `
+            }
+
+            if (type === 'audio') {
+                return `
                     <div style="text-align: center;">
                         <audio controls style="width: 100%;"
                                onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                            <source src="${url}">
+                            <source src="${safeUrl}">
                             Seu navegador não suporta áudio.
                         </audio>
                         <div style="display: none; color: #ef4444; padding: 20px;">❌ Não foi possível carregar o áudio</div>
                     </div>
                 `;
             }
-            
-            preview.innerHTML = previewHtml;
+
+            return `
+                <div style="text-align: center;">
+                    <a href="${safeUrl}" target="_blank" rel="noopener" style="color: #0369a1;">📎 Abrir mídia</a>
+                </div>
+            `;
+        }
+
+        function renderScheduledMessageContent(msg) {
+            if (!msg) {
+                return '<div>Mensagem inválida</div>';
+            }
+
+            if (msg.message_type === 'text') {
+                const text = msg.message_text ? escapeHtml(msg.message_text) : 'Sem texto';
+                return `<div>${text}</div>`;
+            }
+
+            const mediaUrl = msg.media_url || '';
+            if (!mediaUrl) {
+                return '<div><strong>Mídia:</strong> Não informada</div>';
+            }
+
+            const preview = buildMediaEmbed(mediaUrl, msg.message_type);
+            const caption = msg.message_text
+                ? `<div style="margin-top: 8px;"><strong>Legenda:</strong> ${escapeHtml(msg.message_text)}</div>`
+                : '';
+            const shouldAddLink = ['image', 'video', 'audio'].includes(msg.message_type);
+            const link = shouldAddLink
+                ? `<div style="margin-top: 8px;"><a href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener" style="color: #0369a1;">🔗 Abrir mídia</a></div>`
+                : '';
+
+            return `${preview}${caption}${link}`;
+        }
+
+        // Preview media
+        function previewMedia() {
+            const url = document.getElementById('scheduleMediaUrl').value;
+            const preview = document.getElementById('mediaPreview');
+            const messageType = document.getElementById('scheduleMessageType').value;
+
+            if (!url) {
+                preview.style.display = 'none';
+                return;
+            }
+
+            preview.innerHTML = buildMediaEmbed(url, messageType);
             preview.style.display = 'block';
         }
         
@@ -6980,14 +7036,8 @@ HTML_APP = '''<!DOCTYPE html>
                             </div>
                         </div>
                         
-                        <div class="message-preview">
-                            ${msg.message_type === 'text' ? 
-                                `<div>${msg.message_text || 'Sem texto'}</div>` :
-                                `<div><strong>Mídia:</strong> ${msg.media_url}</div>
-                                 ${msg.message_text ? `<div><strong>Legenda:</strong> ${msg.message_text}</div>` : ''}`
-                            }
-                        </div>
-                        
+                        <div class="message-preview">${renderScheduledMessageContent(msg)}</div>
+
                         <div class="next-run">
                             <strong>Próximo envio:</strong> ${nextRun}
                         </div>
