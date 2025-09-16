@@ -402,7 +402,7 @@ app.post('/connect/:instanceId', (req, res) => {
 app.post('/disconnect/:instanceId', (req, res) => {
     const { instanceId } = req.params;
     const instance = instances.get(instanceId);
-    
+
     if (instance && instance.sock) {
         try {
             instance.sock.logout();
@@ -417,12 +417,91 @@ app.post('/disconnect/:instanceId', (req, res) => {
     }
 });
 
+const deriveDocumentFileName = (input, fallback = 'document') => {
+    if (!input || typeof input !== 'string') {
+        return fallback;
+    }
+
+    try {
+        const parsed = new URL(input);
+        if (parsed.pathname) {
+            const segments = parsed.pathname.split('/').filter(Boolean);
+            if (segments.length > 0) {
+                return segments.pop();
+            }
+        }
+    } catch (err) {
+        // Ignore URL parsing errors and fallback to manual extraction
+    }
+
+    const sanitized = input.split('?')[0];
+    const parts = sanitized.split('/').filter(Boolean);
+    if (parts.length > 0) {
+        return parts.pop();
+    }
+
+    return fallback;
+};
+
+const sanitizePhoneNumber = (phone) => {
+    if (!phone) {
+        return '';
+    }
+    return String(phone).replace(/\D/g, '');
+};
+
+const buildVCard = (contactData) => {
+    const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
+    lines.push(`FN:${contactData.name}`);
+
+    if (contactData.organization) {
+        lines.push(`ORG:${contactData.organization}`);
+    }
+
+    const phoneDigits = sanitizePhoneNumber(contactData.phone);
+    const formattedPhone = contactData.phone || phoneDigits;
+    if (phoneDigits) {
+        lines.push(`TEL;type=CELL;type=VOICE;waid=${phoneDigits}:${formattedPhone}`);
+    } else if (formattedPhone) {
+        lines.push(`TEL;type=CELL;type=VOICE:${formattedPhone}`);
+    }
+
+    if (contactData.email) {
+        lines.push(`EMAIL;type=INTERNET:${contactData.email}`);
+    }
+
+    lines.push('END:VCARD');
+    return lines.join('\n');
+};
+
+const parseStructuredData = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    if (typeof value === 'object') {
+        return value;
+    }
+
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        } catch (err) {
+            return null;
+        }
+    }
+
+    return null;
+};
+
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
+add-media-types-and-validation-in-server.js
     const { to, message, imageData, mediaData, mediaUrl, fileName } = req.body;
     const rawType = req.body.type ?? 'text';
     const type = typeof rawType === 'string' ? rawType.toLowerCase().trim() : 'text';
     const mimetype = typeof req.body.mimetype === 'string' ? req.body.mimetype : undefined;
+
 
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
@@ -476,6 +555,7 @@ app.post('/send/:instanceId', async (req, res) => {
 
     try {
         const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
+add-media-types-and-validation-in-server.js
         const caption = typeof message === 'string' ? message : '';
         const trimmedCaption = caption.trim();
         let payload = null;
@@ -893,6 +973,7 @@ app.post('/send/:instanceId', async (req, res) => {
         await instance.sock.sendMessage(jid, payload);
         console.log(`📤 Mensagem ${type} enviada da instância ${instanceId} para ${to}`);
         res.json({ success: true, instanceId: instanceId, type, to: jid });
+
     } catch (error) {
         console.error(`❌ Erro ao enviar mensagem da instância ${instanceId}:`, error);
         res.status(500).json({
@@ -1014,3 +1095,5 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
     console.log('⏳ Aguardando comandos para conectar instâncias...');
 });
+
+module.exports = { app, instances };
