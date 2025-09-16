@@ -107,7 +107,7 @@ const Settings = () => {
   };
 
   return (
-    <div className="settings">
+    <div className="card settings">
       <h2>⚙️ Configurações</h2>
       <div className="settings-tabs">
         <div

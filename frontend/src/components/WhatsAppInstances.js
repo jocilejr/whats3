@@ -143,11 +143,15 @@ export default function WhatsAppInstances() {
   };
 
   if (loading) {
-    return <div className="loading">Carregando instâncias WhatsApp...</div>;
+    return (
+      <div className="card whatsapp-instances">
+        <div className="loading">Carregando instâncias WhatsApp...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="whatsapp-instances">
+    <div className="card whatsapp-instances">
       <div className="instances-header">
         <h2>📱 Instâncias WhatsApp</h2>
         <button 
