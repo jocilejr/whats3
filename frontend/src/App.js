@@ -33,47 +33,41 @@ const Navigation = ({ currentView, onViewChange }) => {
   return (
     <nav className="main-navigation">
       <div className="nav-items">
-        <button 
+        <button
           className={`nav-item ${currentView === 'dashboard' ? 'active' : ''}`}
           onClick={() => onViewChange('dashboard')}
         >
-          <span className="nav-icon">📊</span>
-          <span>Dashboard</span>
+          <span className="nav-label">Dashboard</span>
         </button>
-        <button 
+        <button
           className={`nav-item ${currentView === 'flows' ? 'active' : ''}`}
           onClick={() => onViewChange('flows')}
         >
-          <span className="nav-icon">🎯</span>
-          <span>Fluxos</span>
+          <span className="nav-label">Fluxos</span>
         </button>
-        <button 
+        <button
           className={`nav-item ${currentView === 'contacts' ? 'active' : ''}`}
           onClick={() => onViewChange('contacts')}
         >
-          <span className="nav-icon">👥</span>
-          <span>Contatos</span>
+          <span className="nav-label">Contatos</span>
         </button>
-        <button 
+        <button
           className={`nav-item ${currentView === 'messages' ? 'active' : ''}`}
           onClick={() => onViewChange('messages')}
         >
-          <span className="nav-icon">💬</span>
-          <span>Mensagens</span>
+          <span className="nav-label">Mensagens</span>
         </button>
         <button
           className={`nav-item ${currentView === 'instances' ? 'active' : ''}`}
           onClick={() => onViewChange('instances')}
         >
-          <span className="nav-icon">📱</span>
-          <span>Instâncias</span>
+          <span className="nav-label">Instâncias</span>
         </button>
         <button
           className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
           onClick={() => onViewChange('settings')}
         >
-          <span className="nav-icon">⚙️</span>
-          <span>Configurações</span>
+          <span className="nav-label">Configurações</span>
         </button>
       </div>
     </nav>
@@ -159,11 +153,11 @@ const WhatsAppConnection = () => {
   return (
     <div className="whatsapp-connection">
       <div className="connection-header">
-        <h2>🔗 Conexão WhatsApp</h2>
+        <h2>Conexão WhatsApp</h2>
         <div className={`status-indicator ${status}`}>
           <div className="status-dot"></div>
           <span className="status-text">
-            {status === 'connected' ? 'Conectado' : 
+            {status === 'connected' ? 'Conectado' :
              status === 'disconnected' ? 'Desconectado' : 'Erro'}
             {isDemoMode && ' (Demo)'}
           </span>
@@ -172,14 +166,14 @@ const WhatsAppConnection = () => {
 
       {isDemoMode && (
         <div className="demo-badge">
-          🚧 <strong>Modo Demonstração</strong> - Simulando funcionalidade WhatsApp para testes
+          <strong>Modo demonstração</strong> - Simulando funcionalidade WhatsApp para testes
         </div>
       )}
 
       {status === 'connected' && connectedUser && (
         <div className="connected-info">
           <div className="success-badge">
-            ✅ WhatsApp conectado com sucesso!
+            Conexão estabelecida com sucesso.
           </div>
           <div className="user-info">
             <strong>Usuário:</strong> {connectedUser.name || connectedUser.id}
@@ -190,9 +184,9 @@ const WhatsAppConnection = () => {
       {status === 'disconnected' && (
         <div className="qr-section">
           <div className="warning-badge">
-            ⚠️ WhatsApp não está conectado. {isDemoMode ? 'Clique para simular conexão ou ' : ''}Escaneie o QR code para conectar.
+            WhatsApp não está conectado. {isDemoMode ? 'Clique para simular conexão ou ' : ''}escaneie o QR code para conectar.
           </div>
-          
+
           {qrCode && (
             <div className="qr-display">
               <h3>Escaneie este QR Code com o WhatsApp:</h3>
@@ -204,21 +198,21 @@ const WhatsAppConnection = () => {
           )}
           
           <div className="button-group">
-            <button 
+            <button
               className="connect-button"
               onClick={handleConnect}
               disabled={loading}
             >
               {loading ? 'Conectando...' : 'Conectar WhatsApp'}
             </button>
-            
+
             {isDemoMode && (
-              <button 
+              <button
                 className="demo-button"
                 onClick={simulateConnection}
                 disabled={loading}
               >
-                🎯 Simular Conexão (Demo)
+                Simular conexão (demo)
               </button>
             )}
           </div>
@@ -227,7 +221,7 @@ const WhatsAppConnection = () => {
 
       {status === 'error' && (
         <div className="error-badge">
-          ❌ Erro de conexão. Verifique se o serviço WhatsApp está em execução.
+          Erro de conexão. Verifique se o serviço WhatsApp está em execução.
         </div>
       )}
     </div>
@@ -262,23 +256,23 @@ const DashboardStats = () => {
     <div className="dashboard-stats">
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon">👥</div>
+          <div className="stat-icon">NC</div>
           <div className="stat-content">
             <h3>{stats.new_contacts_today}</h3>
             <p>Novos contatos hoje</p>
           </div>
         </div>
-        
+
         <div className="stat-card">
-          <div className="stat-icon">💬</div>
+          <div className="stat-icon">CA</div>
           <div className="stat-content">
             <h3>{stats.active_conversations}</h3>
             <p>Conversas ativas</p>
           </div>
         </div>
-        
+
         <div className="stat-card">
-          <div className="stat-icon">📨</div>
+          <div className="stat-icon">MJ</div>
           <div className="stat-content">
             <h3>{stats.messages_today}</h3>
             <p>Mensagens hoje</p>
@@ -315,7 +309,7 @@ const ContactsList = () => {
 
   return (
     <div className="contacts-list">
-      <h3>📞 Contatos Recentes</h3>
+      <h3>Contatos recentes</h3>
       {contacts.length === 0 ? (
         <div className="empty-state">
           <p>Nenhum contato encontrado ainda.</p>
@@ -401,7 +395,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-content">
-          <h1>🤖 WhatsFlow</h1>
+          <h1>WhatsFlow</h1>
           <p>Sistema de Automação para WhatsApp</p>
         </div>
       </header>
@@ -413,9 +407,9 @@ function App() {
           {currentView === 'dashboard' && (
             <>
               <WhatsAppConnection />
-              
+
               <section className="dashboard-section">
-                <h2>📊 Dashboard</h2>
+                <h2>Visão geral</h2>
                 <DashboardStats />
               </section>
 
@@ -434,7 +428,7 @@ function App() {
 
           {currentView === 'contacts' && (
             <section className="contacts-section">
-              <h2>👥 Gerenciamento de Contatos</h2>
+              <h2>Gerenciamento de contatos</h2>
               <ContactsList />
             </section>
           )}

@@ -74,19 +74,18 @@ export default function FlowList({ onCreateFlow, onEditFlow }) {
   return (
     <div className="flow-list">
       <div className="flow-list-header">
-        <h2>🎯 Fluxos de Automação</h2>
+        <h2>Fluxos de automação</h2>
         <button onClick={onCreateFlow} className="create-flow-button">
-          ➕ Criar Novo Fluxo
+          Criar novo fluxo
         </button>
       </div>
 
       {flows.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">🎯</div>
           <h3>Nenhum fluxo criado ainda</h3>
           <p>Crie seu primeiro fluxo de automação para começar!</p>
           <button onClick={onCreateFlow} className="create-first-flow-button">
-            🚀 Criar Primeiro Fluxo
+            Criar primeiro fluxo
           </button>
         </div>
       ) : (
@@ -130,19 +129,19 @@ export default function FlowList({ onCreateFlow, onEditFlow }) {
                   onClick={() => onEditFlow(flow)}
                   className="edit-button"
                 >
-                  ✏️ Editar
+                  Editar
                 </button>
                 <button
                   onClick={() => handleToggleActive(flow.id, flow.active)}
                   className={`toggle-button ${flow.active ? 'deactivate' : 'activate'}`}
                 >
-                  {flow.active ? '⏸️ Desativar' : '▶️ Ativar'}
+                  {flow.active ? 'Desativar' : 'Ativar'}
                 </button>
                 <button
                   onClick={() => handleDeleteFlow(flow.id)}
                   className="delete-button"
                 >
-                  🗑️ Excluir
+                  Excluir
                 </button>
               </div>
             </div>
