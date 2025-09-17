@@ -29,7 +29,6 @@ import pytz
 import io
 import importlib
 import cgi
-import ipaddress
 
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="cgi")
 
@@ -151,51 +150,6 @@ def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
     return cleaned, secure
 
 
-_LOCAL_PUBLIC_HOST_SUFFIXES = (".local", ".localhost", ".lan", ".internal", ".home")
-_LOCAL_PUBLIC_HOSTNAMES = {
-    "localhost",
-    "host.docker.internal",
-}
-_TRUE_LIKE = {"1", "true", "yes", "on"}
-_FALSE_LIKE = {"0", "false", "no", "off"}
-
-
-def _parse_optional_bool(value: Optional[str]) -> Optional[bool]:
-    if value is None:
-        return None
-    cleaned = value.strip().lower()
-    if not cleaned:
-        return None
-    if cleaned in _TRUE_LIKE:
-        return True
-    if cleaned in _FALSE_LIKE:
-        return False
-    return None
-
-
-def _extract_hostname(authority: str) -> str:
-    host = authority.split("/", 1)[0]
-    if host.startswith("[") and "]" in host:
-        return host[1 : host.index("]")]
-    if ":" in host:
-        return host.split(":", 1)[0]
-    return host
-
-
-def _is_local_public_hostname(hostname: str) -> bool:
-    host_lower = hostname.lower()
-    if host_lower in _LOCAL_PUBLIC_HOSTNAMES:
-        return True
-    for suffix in _LOCAL_PUBLIC_HOST_SUFFIXES:
-        if host_lower.endswith(suffix):
-            return True
-    try:
-        ip_obj = ipaddress.ip_address(host_lower)
-        return ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local
-    except ValueError:
-        return False
-
-
 def _normalize_minio_public_url_value(
     url: Optional[str], *, secure_default: Optional[bool] = None
 ) -> Optional[str]:
@@ -208,15 +162,9 @@ def _normalize_minio_public_url_value(
 
     normalized = trimmed.rstrip("/")
     if "://" not in normalized:
-        override = secure_default
-        if override is None:
-            override = _parse_optional_bool(os.environ.get("MINIO_PUBLIC_URL_SECURE"))
-        hostname = _extract_hostname(normalized)
-        scheme = "https"
-        if override is not None:
-            scheme = "https" if override else "http"
-        elif hostname and _is_local_public_hostname(hostname):
-            scheme = "http"
+        if secure_default is None:
+            secure_default = _MINIO_SECURE_DEFAULT
+        scheme = "https" if secure_default else "http"
         normalized = f"{scheme}://{normalized}"
 
     return normalized
@@ -242,7 +190,8 @@ def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
         if not public_url:
             public_url = stored_url or public_url
 
-    public_url = _normalize_minio_public_url_value(public_url)
+    _, secure_default = _parse_minio_endpoint(endpoint_raw)
+    public_url = _normalize_minio_public_url_value(public_url, secure_default=secure_default)
 
     return endpoint_raw, access_key, secret_key, bucket, public_url
 
