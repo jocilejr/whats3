@@ -150,6 +150,26 @@ def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
     return cleaned, secure
 
 
+def _normalize_minio_public_url_value(
+    url: Optional[str], *, secure_default: Optional[bool] = None
+) -> Optional[str]:
+    if not url:
+        return None
+
+    trimmed = url.strip()
+    if not trimmed:
+        return None
+
+    normalized = trimmed.rstrip("/")
+    if "://" not in normalized:
+        if secure_default is None:
+            secure_default = _MINIO_SECURE_DEFAULT
+        scheme = "https" if secure_default else "http"
+        normalized = f"{scheme}://{normalized}"
+
+    return normalized
+
+
 def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
     """Combine DB stored credentials with environment fallbacks."""
 
@@ -161,12 +181,17 @@ def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
 
     stored = _fetch_minio_credentials_from_db()
     if stored:
-        endpoint_raw = stored.get("url") or endpoint_raw
+        stored_url = stored.get("url") or ""
+        if stored_url:
+            endpoint_raw = stored_url
         access_key = stored.get("access_key") or access_key
         secret_key = stored.get("secret_key") or secret_key
         bucket = stored.get("bucket") or bucket
         if not public_url:
-            public_url = stored.get("url") or public_url
+            public_url = stored_url or public_url
+
+    _, secure_default = _parse_minio_endpoint(endpoint_raw)
+    public_url = _normalize_minio_public_url_value(public_url, secure_default=secure_default)
 
     return endpoint_raw, access_key, secret_key, bucket, public_url
 
@@ -190,6 +215,9 @@ def reload_minio_settings_from_db() -> None:
     if env_secure is not None:
         _MINIO_SECURE_DEFAULT = env_secure.lower() in {"1", "true", "yes", "on"}
 
+    if MINIO_PUBLIC_URL:
+        MINIO_PUBLIC_URL = _normalize_minio_public_url_value(MINIO_PUBLIC_URL)
+
     # Force recreation of the client with the new configuration on the next usage.
     _MINIO_CLIENT = None
 
@@ -208,6 +236,12 @@ def get_current_minio_settings() -> Dict[str, str]:
 def save_minio_credentials(access_key: str, secret_key: str, bucket: str, url: str) -> None:
     """Persist MinIO credentials and refresh in-memory configuration."""
 
+    normalized_url = url.strip() if url else ""
+    if normalized_url:
+        normalized_url = (
+            _normalize_minio_public_url_value(normalized_url) or normalized_url.rstrip("/")
+        )
+
     ensure_minio_credentials_table()
     with sqlite3.connect(DB_FILE, timeout=30) as conn:
         conn.execute("DELETE FROM minio_credentials")
@@ -216,7 +250,7 @@ def save_minio_credentials(access_key: str, secret_key: str, bucket: str, url: s
             INSERT INTO minio_credentials (access_key, secret_key, bucket, url)
             VALUES (?, ?, ?, ?)
             """,
-            (access_key, secret_key, bucket, url),
+            (access_key, secret_key, bucket, normalized_url),
         )
         conn.commit()
 
@@ -227,8 +261,13 @@ reload_minio_settings_from_db()
 
 
 def _get_minio_public_base() -> str:
+    global MINIO_PUBLIC_URL
+
     if MINIO_PUBLIC_URL:
-        return MINIO_PUBLIC_URL.rstrip("/")
+        normalized = _normalize_minio_public_url_value(MINIO_PUBLIC_URL)
+        if normalized != MINIO_PUBLIC_URL:
+            MINIO_PUBLIC_URL = normalized
+        return normalized
     if "://" in MINIO_ENDPOINT_RAW:
         return MINIO_ENDPOINT_RAW.rstrip("/")
     scheme = "https" if _MINIO_SECURE_DEFAULT else "http"
@@ -237,7 +276,7 @@ def _get_minio_public_base() -> str:
 
 def _build_minio_object_url(client, object_name: str) -> str:
     if MINIO_PUBLIC_URL:
-        base = MINIO_PUBLIC_URL.rstrip("/")
+        base = _get_minio_public_base()
         return f"{base}/{MINIO_BUCKET}/{object_name}"
 
     try:
@@ -271,7 +310,7 @@ def update_minio_runtime_configuration(
         _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT = _parse_minio_endpoint(MINIO_ENDPOINT_RAW)
 
     if public_url is not None:
-        MINIO_PUBLIC_URL = public_url or None
+        MINIO_PUBLIC_URL = _normalize_minio_public_url_value(public_url) or None
 
     if access_key is not None:
         MINIO_ACCESS_KEY = access_key
