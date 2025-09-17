@@ -43,11 +43,13 @@ sudo apt update -qq
 # Instalar dependências essenciais
 sudo apt install -y curl wget git build-essential python3 python3-pip python3-venv &>/dev/null
 
-# Instalar Node.js 18 (silencioso)
+# Instalar Node.js 20 (silencioso)
 if ! command -v node &> /dev/null; then
-    echo "📦 Instalando Node.js..."
-    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - &>/dev/null
+    echo "📦 Instalando Node.js 20..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - &>/dev/null
     sudo apt install -y nodejs &>/dev/null
+else
+    echo "✅ Node.js já instalado (necessário Node.js 20 ou superior)"
 fi
 
 # Instalar MongoDB (local)

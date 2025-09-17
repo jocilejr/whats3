@@ -35,20 +35,20 @@ elif command_exists brew; then
     brew update
 fi
 
-# Instalar Node.js
+# Instalar Node.js 20.x
 if ! command_exists node; then
-    echo "📦 Instalando Node.js..."
+    echo "📦 Instalando Node.js 20.x..."
     if command_exists apt-get; then
-        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
         sudo apt-get install -y nodejs
     elif command_exists yum; then
-        curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+        curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
         sudo yum install -y nodejs npm
     elif command_exists brew; then
         brew install node
     fi
 else
-    echo "✅ Node.js já instalado"
+    echo "✅ Node.js já instalado (requisito mínimo: versão 20.x)"
 fi
 
 # Instalar Python

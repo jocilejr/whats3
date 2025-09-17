@@ -32,9 +32,9 @@ sudo apt update && sudo apt upgrade -y
 echo "📦 Instalando dependências..."
 sudo apt install -y curl wget git nginx certbot python3-certbot-nginx build-essential
 
-# Instalar Node.js 18
-echo "📦 Instalando Node.js 18..."
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# Instalar Node.js 20
+echo "📦 Instalando Node.js 20..."
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Instalar Python e pip
