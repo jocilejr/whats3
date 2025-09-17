@@ -13,7 +13,7 @@ echo "🚀 WhatsFlow - Instalador Automático"
 echo "===================================="
 echo ""
 echo "Este script irá instalar:"
-echo "✅ Node.js 18 + Python 3 + MongoDB"
+echo "✅ Node.js 20 + Python 3 + MongoDB"
 echo "✅ Nginx + SSL (Let's Encrypt)"
 echo "✅ WhatsFlow completo (Backend + Frontend + WhatsApp Service)"
 echo "✅ Configuração automática de serviços"
@@ -61,9 +61,9 @@ sudo apt upgrade -y
 # Instalar dependências essenciais
 sudo apt install -y curl wget git nginx certbot python3-certbot-nginx build-essential software-properties-common
 
-# Instalar Node.js 18
-echo "📦 Instalando Node.js 18..."
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# Instalar Node.js 20
+echo "📦 Instalando Node.js 20..."
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Verificar versões

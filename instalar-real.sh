@@ -8,7 +8,7 @@ set -e
 
 echo "🤖 WhatsFlow Real - Instalação Ultra-Simples (v2.0)"
 echo "====================================================="
-echo "✅ Python + Node.js para WhatsApp REAL"
+echo "✅ Python + Node.js 20+ para WhatsApp REAL"
 echo "✅ Conexão via QR Code verdadeira"
 echo "✅ Mensagens reais enviadas/recebidas"
 echo "✅ Central de contatos automática"
@@ -42,9 +42,9 @@ echo "✅ Biblioteca 'minio' disponível"
 echo "🔍 Verificando Node.js..."
 if ! command -v node &> /dev/null; then
     echo "⚠️ Node.js não encontrado!"
-    echo "📦 Para usar WhatsApp REAL, instale Node.js:"
-    echo "   Ubuntu/Debian: curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - && sudo apt-get install -y nodejs"
-    echo "   CentOS/RHEL: curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash - && sudo yum install nodejs npm"
+    echo "📦 Para usar WhatsApp REAL, instale Node.js 20 ou superior:"
+    echo "   Ubuntu/Debian: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs"
+    echo "   CentOS/RHEL: curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash - && sudo yum install nodejs npm"
     echo "   macOS: brew install node"
     echo
     echo "🔧 Ou continuar com versão simplificada (sem WhatsApp real)?"
@@ -55,7 +55,7 @@ if ! command -v node &> /dev/null; then
         exit 1
     fi
     
-    echo "⚠️ Iniciando em modo demonstração (Node.js não disponível)"
+    echo "⚠️ Iniciando em modo demonstração (Node.js 20+ não disponível)"
     echo "🚀 Executando WhatsFlow Pure (modo demo)..."
     if [ -f "whatsflow-pure.py" ]; then
         python3 whatsflow-pure.py
@@ -68,7 +68,7 @@ if ! command -v node &> /dev/null; then
 else
     NODE_VERSION=$(node --version)
     NPM_VERSION=$(npm --version)
-    echo "✅ Node.js $NODE_VERSION encontrado"
+    echo "✅ Node.js $NODE_VERSION encontrado (requisito mínimo: 20.x)"
     echo "✅ NPM $NPM_VERSION encontrado"
 fi
 

@@ -3,7 +3,7 @@
 WhatsFlow Real - Versão com Baileys REAL
 Sistema de Automação WhatsApp com conexão verdadeira
 
-Requisitos: Python 3 + Node.js (para Baileys)
+Requisitos: Python 3 + Node.js 20 ou superior (para Baileys)
 Instalação: python3 whatsflow-real.py
 Acesso: http://localhost:8888
 """
@@ -13,6 +13,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -8027,6 +8028,9 @@ class BaileysManager:
                 "version": "1.0.0",
                 "description": "WhatsApp Baileys Service for WhatsFlow",
                 "main": "server.js",
+                "engines": {
+                    "node": ">=20"
+                },
                 "dependencies": {
                     "@whiskeysockets/baileys": "^6.7.0",
                     "express": "^4.18.2",
@@ -8639,7 +8643,7 @@ app.listen(PORT, '0.0.0.0', () => {
             except subprocess.TimeoutExpired:
                 print("⏰ Timeout na instalação - continuando mesmo assim...")
             except FileNotFoundError:
-                print("❌ npm/yarn não encontrado. Por favor instale Node.js primeiro.")
+                print("❌ npm/yarn não encontrado. Por favor instale Node.js 20 ou superior e tente novamente.")
                 return False
             
             # Start the service
@@ -8674,7 +8678,7 @@ app.listen(PORT, '0.0.0.0', () => {
                     return False
                     
             except FileNotFoundError:
-                print("❌ Node.js não encontrado no sistema")
+                print("❌ Node.js não encontrado no sistema. Instale Node.js 20 ou superior para utilizar o WhatsApp real.")
                 return False
             
         except Exception as e:
@@ -11123,35 +11127,61 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
         # Suppress default logging
         pass
 
-def check_node_installed():
-    """Check if Node.js is installed"""
+def check_node_installed() -> Tuple[bool, Optional[str]]:
+    """Check if Node.js >= 20 is installed."""
     try:
-        result = subprocess.run(['node', '--version'], capture_output=True, text=True)
-        return result.returncode == 0
+        result = subprocess.run(
+            ['node', '--version'], capture_output=True, text=True, check=False
+        )
     except FileNotFoundError:
-        return False
+        return False, None
+
+    version_output = (result.stdout or result.stderr or "").strip()
+    if result.returncode != 0:
+        print("❌ Não foi possível verificar a versão do Node.js.")
+        if version_output:
+            print(f"   Saída do comando: {version_output}")
+        return False, version_output or None
+
+    match = re.match(r"v?(\d+)(?:\.(\d+))?", version_output)
+    if not match:
+        print("⚠️ Não foi possível interpretar a versão do Node.js.")
+        print("   O WhatsApp real requer Node.js 20 ou superior.")
+        return False, version_output or None
+
+    major_version = int(match.group(1))
+    if major_version < 20:
+        print("❌ Node.js encontrado, porém a versão é incompatível.")
+        print(f"   Versão detectada: {version_output}")
+        print("   O WhatsApp real requer Node.js 20 ou superior. Atualize o Node.js e tente novamente.")
+        sys.exit(1)
+
+    return True, version_output
 
 def main():
     print("🚀 WhatsFlow Professional - Sistema Avançado")
     print("=" * 50)
     print("✅ Python backend com WebSocket")
-    print("✅ Node.js + Baileys para WhatsApp real")
+    print("✅ Node.js 20+ + Baileys para WhatsApp real")
     print("✅ Interface profissional moderna")
     print("✅ Tempo real + Design refinado")
     print()
     
     # Check Node.js
-    if not check_node_installed():
+    node_available, node_version = check_node_installed()
+    if not node_available:
         print("❌ Node.js não encontrado!")
-        print("📦 Para instalar Node.js:")
-        print("   Ubuntu: sudo apt install nodejs npm")
+        print("ℹ️ O WhatsApp real requer Node.js 20 ou superior.")
+        print("📦 Para instalar Node.js 20:")
+        print("   Ubuntu/Debian: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs")
+        print("   CentOS/RHEL: curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash - && sudo yum install nodejs npm")
         print("   macOS:  brew install node")
         print()
-        print("🔧 Continuar mesmo assim? (s/n)")
+        print("🔧 Continuar mesmo assim (modo demonstração, sem WhatsApp real)? (s/n)")
         if input().lower() != 's':
             return
     else:
-        print("✅ Node.js encontrado")
+        print(f"✅ Node.js {node_version} encontrado (compatível com WhatsApp real)")
     
     # Initialize database
     print("📁 Inicializando banco de dados...")
