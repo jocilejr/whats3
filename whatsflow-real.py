@@ -150,27 +150,6 @@ def _parse_minio_endpoint(endpoint: str) -> Tuple[str, bool]:
     return cleaned, secure
 
 
-def _is_localhost_like(hostname: Optional[str]) -> bool:
-    if not hostname:
-        return False
-
-    cleaned = hostname.strip().lower()
-    if not cleaned:
-        return False
-
-    if cleaned.startswith("[") and cleaned.endswith("]"):
-        cleaned = cleaned[1:-1]
-
-    if cleaned.startswith("localhost"):
-        return True
-    if cleaned.startswith("127."):
-        return True
-    if cleaned in {"0.0.0.0", "::1"}:
-        return True
-
-    return False
-
-
 def _normalize_minio_public_url_value(
     url: Optional[str], *, secure_default: Optional[bool] = None
 ) -> Optional[str]:
@@ -183,10 +162,8 @@ def _normalize_minio_public_url_value(
 
     normalized = trimmed.rstrip("/")
     if "://" not in normalized:
-        parsed = urllib.parse.urlparse(f"//{normalized}")
-        hostname = parsed.hostname or normalized.split(":", 1)[0]
         if secure_default is None:
-            secure_default = not _is_localhost_like(hostname)
+            secure_default = _MINIO_SECURE_DEFAULT
         scheme = "https" if secure_default else "http"
         normalized = f"{scheme}://{normalized}"
 
@@ -213,7 +190,8 @@ def _load_minio_configuration() -> Tuple[str, str, str, str, Optional[str]]:
         if not public_url:
             public_url = stored_url or public_url
 
-    public_url = _normalize_minio_public_url_value(public_url)
+    _, secure_default = _parse_minio_endpoint(endpoint_raw)
+    public_url = _normalize_minio_public_url_value(public_url, secure_default=secure_default)
 
     return endpoint_raw, access_key, secret_key, bucket, public_url
 
