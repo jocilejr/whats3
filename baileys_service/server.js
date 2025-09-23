@@ -20,6 +20,26 @@ const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
 app.use(express.json({ limit: BODY_LIMIT }));
 app.use(express.urlencoded({ limit: BODY_LIMIT, extended: true }));
 
+app.use((err, req, res, next) => {
+    if (
+        err &&
+        (err.type === 'entity.too.large' ||
+            err.name === 'PayloadTooLargeError' ||
+            err.status === 413 ||
+            err.statusCode === 413)
+    ) {
+        console.warn(
+            '⚠️ Payload base64 recebido excede o limite suportado. Utilize URLs HTTP/HTTPS públicas para enviar mídias.',
+        );
+        return res.status(413).json({
+            error:
+                'Envio de mídia em base64 excede o limite suportado. Forneça mídias via URLs HTTP/HTTPS acessíveis publicamente.',
+        });
+    }
+
+    return next(err);
+});
+
 const BASE64_ALLOWED_CHARS = /^[A-Za-z0-9+/=\n\r\t ]+$/;
 const SUPPORTED_MEDIA_TYPES = new Set(['image', 'video', 'audio', 'document']);
 
