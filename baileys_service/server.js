@@ -14,8 +14,8 @@ app.use(cors({
     allowedHeaders: ['*']
 }));
 
-// Allow configuring body size to avoid 413 PayloadTooLargeError when sending media as base64
-const BODY_LIMIT = process.env.BAILEYS_BODY_LIMIT || '100mb';
+// Fixed body size to avoid PayloadTooLargeError when sending media as base64
+const BODY_LIMIT = '15mb';
 app.use(express.json({ limit: BODY_LIMIT }));
 app.use(express.urlencoded({ limit: BODY_LIMIT, extended: true }));
 
@@ -445,8 +445,34 @@ app.post('/send/:instanceId', async (req, res) => {
             if (type === 'image' && imageData) {
                 // Handle image sending (base64)
                 const buffer = Buffer.from(imageData, 'base64');
+                console.log(
+                    `🧮 Base64 recebido com ${buffer.length} bytes (~${(buffer.length / (1024 * 1024)).toFixed(2)} MB)`
+                );
                 await instance.sock.sendMessage(jid, { image: buffer, caption });
             } else {
+                if (mediaUrl) {
+                    try {
+                        const fetch = (await import('node-fetch')).default;
+                        const response = await fetch(mediaUrl, { method: 'HEAD' });
+                        if (response.ok) {
+                            const contentLength = response.headers.get('content-length');
+                            if (contentLength) {
+                                const bytes = Number(contentLength);
+                                console.log(
+                                    `🌐 Media remota reporta ${bytes} bytes (~${(bytes / (1024 * 1024)).toFixed(2)} MB)`
+                                );
+                            } else {
+                                console.log('🌐 Media remota sem header content-length informado');
+                            }
+                        } else {
+                            console.log(
+                                `⚠️ Não foi possível obter tamanho da mídia remota (status ${response.status})`
+                            );
+                        }
+                    } catch (err) {
+                        console.log('⚠️ Erro ao consultar tamanho da mídia remota:', err.message);
+                    }
+                }
                 const msg = { [type]: { url: mediaUrl }, caption };
                 if (type === 'document' && fileName) {
                     msg.fileName = fileName;
