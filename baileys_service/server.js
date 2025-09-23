@@ -585,8 +585,16 @@ app.post('/disconnect/:instanceId', (req, res) => {
 
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    const { to, message, type: rawType = 'text', mediaUrl, fileName } = req.body;
+    const {
+        to,
+        message,
+        type: rawType = 'text',
+        mediaUrl,
+        fileName,
+        mediaType: providedMediaType,
+    } = req.body;
     const imageData = typeof req.body?.imageData === 'string' ? req.body.imageData.trim() : '';
+    const rawMessage = typeof message === 'string' ? message.trim() : '';
 
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
@@ -595,11 +603,33 @@ app.post('/send/:instanceId', async (req, res) => {
 
     try {
         const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
-        const caption = message || '';
-        const normalizedType = typeof rawType === 'string' ? rawType.trim().toLowerCase() : 'text';
+        const normalizedRawType = typeof rawType === 'string' ? rawType.trim().toLowerCase() : 'text';
+        const isGenericMediaType = ['media', 'mídia', 'midia'].includes(normalizedRawType);
+        let normalizedType = normalizedRawType;
+
+        if (isGenericMediaType) {
+            const normalizedProvidedMediaType =
+                typeof providedMediaType === 'string' ? providedMediaType.trim().toLowerCase() : '';
+
+            if (!SUPPORTED_MEDIA_TYPES.has(normalizedProvidedMediaType)) {
+                return res.status(400).json({
+                    error:
+                        "Tipo de mídia genérico requer campo 'mediaType' com um dos valores: image, video, audio ou document.",
+                });
+            }
+
+            normalizedType = normalizedProvidedMediaType;
+        }
+
+        const caption =
+            typeof req.body?.caption === 'string'
+                ? req.body.caption
+                : !isGenericMediaType
+                ? rawMessage
+                : '';
 
         if (normalizedType === 'text') {
-            await instance.sock.sendMessage(jid, { text: message });
+            await instance.sock.sendMessage(jid, { text: rawMessage });
             console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
             return res.json({ success: true, instanceId: instanceId });
         }
@@ -624,9 +654,35 @@ app.post('/send/:instanceId', async (req, res) => {
             });
         }
 
-        const sanitized = sanitizeMediaUrl(mediaUrl);
-        if (sanitized.error) {
-            return res.status(400).json({ error: sanitized.error });
+        let sanitized;
+        if (isGenericMediaType) {
+            if (!rawMessage) {
+                return res.status(400).json({
+                    error: 'Mensagens de mídia devem fornecer a URL pública no campo "message".',
+                });
+            }
+
+            if (looksLikeBase64(rawMessage)) {
+                return res.status(400).json({
+                    error: 'Envio de mídia em base64 não é suportado. Utilize apenas URLs públicas acessíveis.',
+                });
+            }
+
+            sanitized = sanitizeMediaUrl(rawMessage);
+            if (sanitized.error) {
+                return res.status(400).json({ error: sanitized.error });
+            }
+        } else {
+            sanitized = sanitizeMediaUrl(mediaUrl);
+            if (sanitized.error) {
+                return res.status(400).json({ error: sanitized.error });
+            }
+        }
+
+        if (!sanitized?.url) {
+            return res.status(400).json({
+                error: 'Mensagens de mídia devem incluir uma URL HTTP/HTTPS pública.',
+            });
         }
 
         let metadata;
