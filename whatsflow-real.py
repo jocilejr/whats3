@@ -8,6 +8,7 @@ Instalação: python3 whatsflow-real.py
 Acesso: http://localhost:8888
 """
 
+import base64
 import json
 import sqlite3
 import uuid
@@ -83,6 +84,7 @@ _MINIO_CLIENT = None
 _MINIO_ENDPOINT = None
 _MINIO_SECURE_DEFAULT = False
 _MINIO_BUCKET_POLICY_APPLIED = False
+_MINIO_FORCE_PRESIGNED_URLS = False
 Minio = None
 
 
@@ -201,6 +203,7 @@ def reload_minio_settings_from_db() -> None:
 
     global MINIO_ENDPOINT_RAW, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET
     global MINIO_PUBLIC_URL, _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT, _MINIO_CLIENT
+    global _MINIO_BUCKET_POLICY_APPLIED, _MINIO_FORCE_PRESIGNED_URLS
 
     (
         MINIO_ENDPOINT_RAW,
@@ -220,6 +223,8 @@ def reload_minio_settings_from_db() -> None:
 
     # Force recreation of the client with the new configuration on the next usage.
     _MINIO_CLIENT = None
+    _MINIO_BUCKET_POLICY_APPLIED = False
+    _MINIO_FORCE_PRESIGNED_URLS = False
 
 
 def get_current_minio_settings() -> Dict[str, str]:
@@ -275,7 +280,7 @@ def _get_minio_public_base() -> str:
 
 
 def _build_minio_object_url(client, object_name: str) -> str:
-    if MINIO_PUBLIC_URL:
+    if MINIO_PUBLIC_URL and not _MINIO_FORCE_PRESIGNED_URLS:
         base = _get_minio_public_base()
         return f"{base}/{MINIO_BUCKET}/{object_name}"
 
@@ -304,6 +309,7 @@ def update_minio_runtime_configuration(
 
     global MINIO_ENDPOINT_RAW, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_PUBLIC_URL
     global _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT, _MINIO_CLIENT
+    global _MINIO_BUCKET_POLICY_APPLIED, _MINIO_FORCE_PRESIGNED_URLS
 
     if endpoint is not None:
         MINIO_ENDPOINT_RAW = endpoint or ""
@@ -323,6 +329,8 @@ def update_minio_runtime_configuration(
 
     # Força recriação do cliente com as novas credenciais na próxima utilização
     _MINIO_CLIENT = None
+    _MINIO_BUCKET_POLICY_APPLIED = False
+    _MINIO_FORCE_PRESIGNED_URLS = False
 
 
 def _ensure_minio_dependency():
@@ -436,7 +444,7 @@ API_BASE_URL = resolve_baileys_url()
 
 
 def ensure_minio_bucket(client=None):
-    global _MINIO_BUCKET_POLICY_APPLIED
+    global _MINIO_BUCKET_POLICY_APPLIED, _MINIO_FORCE_PRESIGNED_URLS
     client = client or get_minio_client()
     try:
         bucket_exists = client.bucket_exists(MINIO_BUCKET)
@@ -467,6 +475,7 @@ def ensure_minio_bucket(client=None):
                 MINIO_BUCKET,
                 exc,
             )
+            _MINIO_FORCE_PRESIGNED_URLS = True
         finally:
             _MINIO_BUCKET_POLICY_APPLIED = True
     return client
@@ -6959,8 +6968,8 @@ HTML_APP = '''<!DOCTYPE html>
                 }
                 
                 // Create scheduled message for each group
-                const promises = groupsToUse.map(group => {
-                    return fetch(`${WHATSFLOW_API_URL}/api/scheduled-messages`, {
+                const promises = groupsToUse.map(async group => {
+                    const response = await fetch(`${WHATSFLOW_API_URL}/api/scheduled-messages`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -6979,10 +6988,23 @@ HTML_APP = '''<!DOCTYPE html>
                             schedule_days: scheduleDays
                         })
                     });
+                    if (!response.ok) {
+                        let errorMessage = `Erro ao agendar mensagem para ${group.group_name}`;
+                        try {
+                            const errorData = await response.json();
+                            if (errorData && errorData.error) {
+                                errorMessage = errorData.error;
+                            }
+                        } catch (err) {
+                            // Ignore JSON parse errors and use default message
+                        }
+                        throw new Error(errorMessage);
+                    }
+                    return response.json();
                 });
-                
+
                 await Promise.all(promises);
-                
+
                 alert(`✅ Mensagem agendada para ${groupsToUse.length} grupo(s)!`);
                 hideScheduleMessageModal();
                 
@@ -8796,9 +8818,9 @@ class MessageScheduler:
             for row in messages_to_send:
                 try:
                     message_id = row[0]
-                    message_text = row[2]
-                    message_type = row[3]
-                    media_url = row[4]
+                    message_text = row[2] or ''
+                    message_type = (row[3] or 'text').lower()
+                    media_url = (row[4] or '').strip()
                     schedule_type = row[5]
                     schedule_time = row[6]
                     schedule_days = row[7]
@@ -8890,34 +8912,97 @@ class MessageScheduler:
             if conn:
                 conn.close()
     
+    def _build_baileys_payload(
+        self,
+        *,
+        instance_id: str,
+        group_id: str,
+        message_text: str,
+        message_type: str,
+        media_url: str,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Prepare the payload used to contact the Baileys service.
+
+        Returns a tuple ``(payload, error_message)``.
+        """
+
+        normalized_type = (message_type or 'text').strip().lower()
+        if normalized_type == 'media':
+            # Older records may store "media" instead of the concrete type.
+            normalized_type = 'image'
+
+        payload: Dict[str, Any] = {
+            'to': group_id,
+            'type': 'text',
+            'message': message_text or '',
+        }
+
+        if normalized_type == 'text':
+            return payload, None
+
+        if not media_url:
+            return None, 'URL de mídia não definida para mensagem de mídia agendada'
+
+        supported_media_types = {'image', 'audio', 'video', 'document'}
+        if normalized_type not in supported_media_types:
+            return None, f"Tipo de mídia não suportado: {message_type}"
+
+        payload['type'] = normalized_type
+        payload['mediaUrl'] = media_url
+
+        if normalized_type == 'document':
+            file_name = os.path.basename(urllib.parse.urlparse(media_url).path) or 'documento'
+            payload['fileName'] = file_name
+
+        if normalized_type == 'image':
+            http = _ensure_requests_dependency()
+            try:
+                download_response = http.get(media_url, timeout=(10, 45))
+                download_response.raise_for_status()
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "Não foi possível baixar mídia %s para envio direto: %s. Usando URL remota.",
+                    media_url,
+                    exc,
+                )
+            else:
+                payload['imageData'] = base64.b64encode(download_response.content).decode('ascii')
+                logger.debug(
+                    "Mídia baixada com sucesso para envio direto (%s bytes)",
+                    len(download_response.content),
+                )
+
+        return payload, None
+
     def _send_message_to_group(self, instance_id, group_id, message_text, message_type, media_url):
         """Send message to group via Baileys API"""
+
         try:
-            # Ensure the Baileys service is available before attempting to send
+            http = _ensure_requests_dependency()
+
             if not check_service_health(self.api_base_url):
                 error_msg = f"Baileys service indisponível em {self.api_base_url}"
                 print(f"❌ {error_msg}")
                 return False, error_msg
 
-            if message_type == 'text':
-                payload = {
-                    'to': group_id,
-                    'type': 'text',
-                    'message': message_text or ''
-                }
-            else:
-                payload = {
-                    'to': group_id,
-                    'type': message_type,
-                    'mediaUrl': media_url,
-                }
-                if message_text:
-                    payload['message'] = message_text
+            payload, payload_error = self._build_baileys_payload(
+                instance_id=instance_id,
+                group_id=group_id,
+                message_text=message_text,
+                message_type=message_type,
+                media_url=media_url or '',
+            )
+
+            if payload_error:
+                logger.error(payload_error)
+                return False, payload_error
+
+            normalized_type = payload['type']
+            log_details = f"message_type={normalized_type}, media_url={media_url}"
 
             for attempt in range(3):
                 try:
-                    log_details = f"message_type={message_type}, media_url={media_url}"
-                    if message_type == 'text':
+                    if normalized_type == 'text':
                         logger.info(
                             f"📤 Enviando mensagem de texto ao grupo {group_id} ({log_details})"
                         )
@@ -8925,28 +9010,51 @@ class MessageScheduler:
                         logger.info(
                             f"📤 Enviando mensagem de mídia ao grupo {group_id} ({log_details})"
                         )
-                    response = requests.post(
+
+                    response = http.post(
                         f"{self.api_base_url}/send/{instance_id}",
                         json=payload,
                         timeout=(10, 180),
                     )
-                    
+
                     if response.status_code != 200:
+                        try:
+                            error_payload = response.json()
+                            error_detail = error_payload.get('error')
+                        except Exception:
+                            error_detail = response.text
+
                         logger.error(
-                            f"Baileys send failed ({response.status_code}): {response.text}"
+                            f"Baileys send failed ({response.status_code}): {error_detail}"
                         )
-                        return False, f"Baileys send failed ({response.status_code})"
+                        detail_message = error_detail or f"HTTP {response.status_code}"
+                        return False, f"Baileys send failed ({response.status_code}): {detail_message}"
+
+                    try:
+                        response_data = response.json()
+                    except ValueError:
+                        logger.error("Baileys respondeu com payload inválido: %s", response.text)
+                        return False, "Resposta inválida do serviço Baileys"
+
+                    if not response_data.get('success', False):
+                        error_detail = response_data.get('error') or 'Resposta sem sucesso'
+                        logger.error("Baileys indicou falha no envio: %s", error_detail)
+                        return False, f"Baileys indicou falha no envio: {error_detail}"
+
+                    if normalized_type == 'text':
+                        logger.info("✅ Mensagem de texto enviada ao grupo %s", group_id)
+                    else:
+                        logger.info("✅ Mensagem de mídia enviada ao grupo %s", group_id)
 
                     return True, None
-                except requests.exceptions.Timeout:
+                except http.exceptions.Timeout:  # type: ignore[attr-defined]
                     if attempt < 2:
                         time.sleep(2 ** attempt)
                         continue
                     logger.error("Baileys send timed out")
                     return False, "Baileys send timed out"
 
-
-        except Exception as e:
+        except Exception as e:  # pragma: no cover - defensive logging
             error_msg = f"Erro ao enviar via Baileys: {e}"
             print(f"❌ {error_msg}")
             return False, error_msg
@@ -10967,18 +11075,34 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
 
             # Optional campaign field
             campaign_id = data.get('campaign_id', None)
-            
+
             # Optional fields
-            message_text = data.get('message_text', '')
-            message_type = data.get('message_type', 'text')
-            media_url = data.get('media_url', '')
+            message_text = (data.get('message_text') or '').strip()
+            raw_message_type = (data.get('message_type') or data.get('messageType') or 'text')
+            message_type = raw_message_type.strip().lower()
+            media_url = (data.get('media_url') or data.get('mediaUrl') or '').strip()
             schedule_date = data.get('schedule_date')
             schedule_days = data.get('schedule_days', [])
-            
+
+            valid_message_types = {'text', 'image', 'audio', 'video', 'document'}
+            if message_type not in valid_message_types:
+                self.send_json_response({"error": "Tipo de mensagem inválido"}, 400)
+                return
+
             if not all([group_id, group_name, instance_id, schedule_type, schedule_time]):
                 self.send_json_response({"error": "Campos obrigatórios faltando"}, 400)
                 return
-            
+
+            if message_type != 'text':
+                if not media_url:
+                    self.send_json_response({"error": "URL de mídia é obrigatória para mensagens de mídia"}, 400)
+                    return
+
+                parsed = urllib.parse.urlparse(media_url)
+                if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                    self.send_json_response({"error": "URL de mídia inválida"}, 400)
+                    return
+
             # Calculate next run using Brazil timezone
             from datetime import datetime, timedelta
             import pytz
