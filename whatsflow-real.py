@@ -8985,7 +8985,6 @@ class MessageScheduler:
                 print(f"❌ {error_msg}")
                 return False, error_msg
 
-fix-media-message-sending-issue-7hg5n1
             payload, payload_error = self._build_baileys_payload(
                 instance_id=instance_id,
                 group_id=group_id,
@@ -9031,7 +9030,6 @@ fix-media-message-sending-issue-7hg5n1
                         )
                         detail_message = error_detail or f"HTTP {response.status_code}"
                         return False, f"Baileys send failed ({response.status_code}): {detail_message}"
-fix-media-message-sending-issue-7hg5n1
 
 
                     try:
@@ -9045,7 +9043,6 @@ fix-media-message-sending-issue-7hg5n1
                         logger.error("Baileys indicou falha no envio: %s", error_detail)
                         return False, f"Baileys indicou falha no envio: {error_detail}"
 
-fix-media-message-sending-issue-7hg5n1
                     if normalized_type == 'text':
                         logger.info("✅ Mensagem de texto enviada ao grupo %s", group_id)
                     else:
