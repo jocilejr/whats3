@@ -515,6 +515,106 @@ def check_service_health(api_base_url: str) -> bool:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+MAX_MEDIA_BYTES = 15 * 1024 * 1024  # 15 MB limit accepted by Baileys payloads
+REMOTE_MEDIA_TIMEOUT = (5, 15)
+_BASE64_ALLOWED_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r\t ")
+
+
+def _looks_like_base64_payload(value: str) -> bool:
+    """Heuristically detect legacy base64 blobs accidentally stored as URLs."""
+
+    if not value:
+        return False
+
+    trimmed = value.strip()
+    if not trimmed:
+        return False
+
+    lowered = trimmed.lower()
+    if lowered.startswith(("http://", "https://")):
+        return False
+
+    if lowered.startswith("data:"):
+        return True
+
+    # Short strings are unlikely to be base64 payloads large enough to matter.
+    if len(trimmed) < 128:
+        return False
+
+    # Inspect the first chunk to avoid processing megabytes unnecessarily.
+    sample = trimmed[:512]
+    if any(char not in _BASE64_ALLOWED_CHARS for char in sample):
+        return False
+
+    # Base64 payloads tend to have a length divisible by 4.
+    return len(trimmed.replace("\n", "").replace("\r", "")) % 4 == 0
+
+
+def validate_remote_media_url(media_url: str) -> tuple[str, Optional[str], Optional[int]]:
+    """Validate that the provided media URL is remotely accessible and lightweight."""
+
+    trimmed = (media_url or "").strip()
+    if not trimmed:
+        return "", "URL de mídia não fornecida", None
+
+    lowered = trimmed.lower()
+    if not lowered.startswith(("http://", "https://")):
+        if _looks_like_base64_payload(trimmed):
+            return trimmed, (
+                "Conteúdo base64 detectado. Faça o upload da mídia e informe apenas a URL "
+                "HTTP/HTTPS acessível pelo Baileys."
+            ), None
+        return trimmed, "URL de mídia deve começar com http:// ou https://", None
+
+    http = _ensure_requests_dependency()
+
+    response = None
+    try:
+        response = http.head(trimmed, allow_redirects=True, timeout=REMOTE_MEDIA_TIMEOUT)
+        if response.status_code in (405, 501):  # Method not allowed or not implemented
+            response.close()
+            response = http.get(
+                trimmed,
+                allow_redirects=True,
+                stream=True,
+                timeout=REMOTE_MEDIA_TIMEOUT,
+            )
+    except http.exceptions.RequestException as exc:  # type: ignore[attr-defined]
+        if response is not None:
+            response.close()
+        return trimmed, f"Não foi possível acessar a mídia remota: {exc}", None
+
+    if response.status_code >= 400:
+        response.close()
+        return trimmed, (
+            f"Não foi possível acessar a mídia remota (status {response.status_code})."
+        ), None
+
+    content_length_header = response.headers.get("content-length")
+    response.close()
+
+    if content_length_header:
+        try:
+            content_length = int(content_length_header)
+        except (TypeError, ValueError):
+            logger.debug("Content-Length não numérico informado pela URL %s", trimmed)
+            return trimmed, None, None
+
+        if content_length > MAX_MEDIA_BYTES:
+            size_mb = content_length / (1024 * 1024)
+            return trimmed, (
+                f"A mídia remota possui {size_mb:.2f} MB, excedendo o limite seguro de 15 MB "
+                "aceito pelo Baileys."
+            ), content_length
+
+        return trimmed, None, content_length
+
+    logger.debug(
+        "URL de mídia %s sem cabeçalho Content-Length; prosseguindo mesmo assim.",
+        trimmed,
+    )
+    return trimmed, None, None
+
 # HTML da aplicação (mesmo do Pure, mas com conexão real)
 HTML_APP = '''<!DOCTYPE html>
 <html lang="pt-BR">
@@ -8769,11 +8869,12 @@ class MessageScheduler:
     def start(self):
         """Start the message scheduler"""
         if not self.running:
+            self._sanitize_legacy_media_records()
             self.running = True
             self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
             self.thread.start()
             print("✅ Message Scheduler iniciado")
-    
+
     def stop(self):
         """Stop the message scheduler"""
         self.running = False
@@ -8832,7 +8933,34 @@ class MessageScheduler:
                     if not group_id or not instance_id:
                         print(f"⚠️ Mensagem {message_id} sem grupo ou instância definidos")
                         continue
-                    
+
+                    if media_url and _looks_like_base64_payload(media_url):
+                        warning_msg = (
+                            "Mensagem agendada contém payload base64 legado; desativando "
+                            f"o registro {message_id}."
+                        )
+                        logger.warning(warning_msg)
+                        cursor.execute(
+                            """
+                            UPDATE scheduled_messages
+                            SET media_url = '', is_active = 0, next_run = NULL
+                            WHERE id = ?
+                            """,
+                            (message_id,),
+                        )
+                        self._log_message_sent(
+                            message_id,
+                            group_id,
+                            group_name,
+                            message_text,
+                            'failed',
+                            instance_id,
+                            warning_msg,
+                            cursor=cursor,
+                        )
+                        conn.commit()
+                        continue
+
                     # Send message
                     success, error_message = self._send_message_to_group(
                         instance_id, group_id, message_text, message_type, media_url
@@ -8946,12 +9074,26 @@ class MessageScheduler:
         if normalized_type not in supported_media_types:
             return None, f"Tipo de mídia não suportado: {message_type}"
 
+        trimmed_url, validation_error, content_length = validate_remote_media_url(media_url)
+        if validation_error:
+            return None, validation_error
+
         payload['type'] = normalized_type
-        payload['mediaUrl'] = media_url
+        payload['mediaUrl'] = trimmed_url
+
+        if content_length is not None:
+            size_mb = content_length / (1024 * 1024)
+            logger.info(
+                "🌐 Mídia remota reportada com %.2f MB (registro %s)",
+                size_mb,
+                group_id,
+            )
 
         if normalized_type == 'document':
-            file_name = os.path.basename(urllib.parse.urlparse(media_url).path) or 'documento'
+            file_name = os.path.basename(urllib.parse.urlparse(trimmed_url).path) or 'documento'
             payload['fileName'] = file_name
+
+        payload.pop('imageData', None)
 
         return payload, None
 
@@ -9042,6 +9184,52 @@ class MessageScheduler:
             error_msg = f"Erro ao enviar via Baileys: {e}"
             print(f"❌ {error_msg}")
             return False, error_msg
+
+    def _sanitize_legacy_media_records(self):
+        """Disable legacy scheduled messages that still store base64 payloads."""
+
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, media_url
+                FROM scheduled_messages
+                WHERE is_active = 1
+                  AND TRIM(IFNULL(media_url, '')) != ''
+                  AND LOWER(IFNULL(message_type, '')) IN ('image', 'audio', 'video', 'document')
+                """
+            )
+
+            rows = cursor.fetchall()
+            disabled = 0
+            for message_id, media_url in rows:
+                if media_url and _looks_like_base64_payload(media_url):
+                    cursor.execute(
+                        """
+                        UPDATE scheduled_messages
+                        SET media_url = '', is_active = 0, next_run = NULL
+                        WHERE id = ?
+                        """,
+                        (message_id,),
+                    )
+                    disabled += 1
+
+            if disabled:
+                conn.commit()
+                logger.warning(
+                    "Desativados %s agendamentos de mídia com payload base64 legado.",
+                    disabled,
+                )
+        except sqlite3.Error as exc:
+            logger.error(
+                "Não foi possível sanitizar agendamentos legados com base64: %s",
+                exc,
+            )
+        finally:
+            if conn:
+                conn.close()
     
     def _calculate_next_weekly_run(self, schedule_time, schedule_days, brazil_tz):
         """Calculate next weekly run"""
@@ -9860,11 +10048,17 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
 
             to = data.get('to', '')
             message = data.get('message') or data.get('caption') or ''
-            message_type = data.get('type', 'text')
+            message_type = (data.get('type', 'text') or 'text').strip().lower()
 
-            payload = {'to': to, 'type': message_type, 'message': message}
+            payload = {'to': to, 'type': 'text', 'message': message}
 
             if message_type != 'text':
+                if data.get('imageData'):
+                    self.send_json_response({
+                        "error": "Envio de base64 não é mais suportado. Utilize uma URL HTTP/HTTPS acessível."
+                    }, 400)
+                    return
+
                 media_url = (
                     data.get('mediaUrl') or
                     data.get('imageUrl') or
@@ -9876,7 +10070,18 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 if not media_url:
                     self.send_json_response({"error": "URL de mídia ausente"}, 400)
                     return
-                payload['mediaUrl'] = media_url
+
+                sanitized_url, validation_error, _ = validate_remote_media_url(media_url)
+                if validation_error:
+                    self.send_json_response({"error": validation_error}, 400)
+                    return
+
+                payload['type'] = message_type
+                payload['mediaUrl'] = sanitized_url
+
+                if message_type == 'document':
+                    parsed = urllib.parse.urlparse(sanitized_url)
+                    payload['fileName'] = os.path.basename(parsed.path) or 'documento'
 
             try:
                 import requests
@@ -9884,7 +10089,7 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                     try:
                         response = requests.post(
                             f'{API_BASE_URL}/send/{instance_id}',
-                            json=payload,
+                            json={k: v for k, v in payload.items() if k != 'imageData'},
                             timeout=(10, 180)
                         )
                         break
@@ -9918,7 +10123,8 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 import urllib.request
                 import urllib.error
                 import socket
-                req_data = json.dumps(payload).encode('utf-8')
+                safe_payload = {k: v for k, v in payload.items() if k != 'imageData'}
+                req_data = json.dumps(safe_payload).encode('utf-8')
                 req = urllib.request.Request(
                     f'{API_BASE_URL}/send/{instance_id}',
                     data=req_data,
@@ -11077,15 +11283,23 @@ class WhatsFlowRealHandler(BaseHTTPRequestHandler):
                 self.send_json_response({"error": "Campos obrigatórios faltando"}, 400)
                 return
 
+            if data.get('imageData'):
+                self.send_json_response({
+                    "error": "Envio de base64 não é mais suportado. Faça o upload e informe apenas a URL pública da mídia."
+                }, 400)
+                return
+
             if message_type != 'text':
                 if not media_url:
                     self.send_json_response({"error": "URL de mídia é obrigatória para mensagens de mídia"}, 400)
                     return
-
-                parsed = urllib.parse.urlparse(media_url)
-                if parsed.scheme not in ("http", "https") or not parsed.netloc:
-                    self.send_json_response({"error": "URL de mídia inválida"}, 400)
+                sanitized_url, validation_error, _ = validate_remote_media_url(media_url)
+                if validation_error:
+                    self.send_json_response({"error": validation_error}, 400)
                     return
+                media_url = sanitized_url
+            else:
+                media_url = ''
 
             # Calculate next run using Brazil timezone
             from datetime import datetime, timedelta

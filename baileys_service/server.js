@@ -16,6 +16,7 @@ app.use(cors({
 
 // Fixed body size to avoid PayloadTooLargeError when sending media as base64
 const BODY_LIMIT = '15mb';
+const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
 app.use(express.json({ limit: BODY_LIMIT }));
 app.use(express.urlencoded({ limit: BODY_LIMIT, extended: true }));
 
@@ -441,10 +442,26 @@ app.post('/send/:instanceId', async (req, res) => {
         } else if (mediaTypes.includes(type)) {
             const trimmedMediaUrl = (mediaUrl || '').trim();
             const hasMediaUrl = trimmedMediaUrl.length > 0;
-            const hasImageData = typeof imageData === 'string' && imageData.length > 0;
+            const hasImageData = typeof imageData === 'string' && imageData.trim().length > 0;
 
-            if (!hasMediaUrl && !hasImageData) {
-                return res.status(400).json({ error: 'Missing media data' });
+            if (!hasMediaUrl) {
+                if (hasImageData) {
+                    try {
+                        const approxBytes = Buffer.from(imageData, 'base64').length;
+                        console.warn(
+                            `❌ Payload base64 recebido (${(approxBytes / (1024 * 1024)).toFixed(2)} MB). ` +
+                                'Envio em base64 não é mais suportado.'
+                        );
+                    } catch (err) {
+                        console.warn('❌ Payload base64 inválido recebido e descartado.');
+                    }
+                    return res.status(400).json({
+                        error:
+                            'Envio de mídia em base64 não é suportado. Utilize apenas mediaUrl pública acessível.',
+                    });
+                }
+
+                return res.status(400).json({ error: 'Missing media URL for this media type' });
             }
 
             if (hasMediaUrl) {
@@ -455,9 +472,20 @@ app.post('/send/:instanceId', async (req, res) => {
                         const contentLength = response.headers.get('content-length');
                         if (contentLength) {
                             const bytes = Number(contentLength);
-                            console.log(
-                                `🌐 Media remota reporta ${bytes} bytes (~${(bytes / (1024 * 1024)).toFixed(2)} MB)`
-                            );
+                            if (!Number.isNaN(bytes)) {
+                                if (bytes > MAX_MEDIA_BYTES) {
+                                    const sizeMb = (bytes / (1024 * 1024)).toFixed(2);
+                                    console.warn(`❌ Mídia remota com ${sizeMb} MB excede o limite suportado.`);
+                                    return res.status(413).json({
+                                        error: `Mídia remota excede o limite de ${MAX_MEDIA_BYTES / (1024 * 1024)} MB.`,
+                                    });
+                                }
+                                console.log(
+                                    `🌐 Media remota reporta ${bytes} bytes (~${(bytes / (1024 * 1024)).toFixed(2)} MB)`
+                                );
+                            } else {
+                                console.log('🌐 Media remota retornou Content-Length não numérico');
+                            }
                         } else {
                             console.log('🌐 Media remota sem header content-length informado');
                         }
@@ -475,15 +503,6 @@ app.post('/send/:instanceId', async (req, res) => {
                     msg.fileName = fileName;
                 }
                 await instance.sock.sendMessage(jid, msg);
-            } else if (type === 'image' && hasImageData) {
-                // Legacy fallback for base64 encoded images.
-                const buffer = Buffer.from(imageData, 'base64');
-                console.log(
-                    `🧮 Base64 recebido com ${buffer.length} bytes (~${(buffer.length / (1024 * 1024)).toFixed(2)} MB)`
-                );
-                await instance.sock.sendMessage(jid, { image: buffer, caption });
-            } else {
-                return res.status(400).json({ error: 'Missing media URL for this media type' });
             }
         } else {
             return res.status(400).json({ error: `Unsupported message type: ${type}` });
