@@ -423,7 +423,8 @@ app.post('/disconnect/:instanceId', (req, res) => {
 
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    const { to, message, type = 'text', imageData, mediaUrl, fileName } = req.body;
+    const { to, message, type = 'text', mediaUrl, fileName } = req.body;
+    const imageData = req.body?.imageData;
 
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
@@ -438,46 +439,51 @@ app.post('/send/:instanceId', async (req, res) => {
         if (type === 'text') {
             await instance.sock.sendMessage(jid, { text: message });
         } else if (mediaTypes.includes(type)) {
-            if (!imageData && !mediaUrl) {
+            const trimmedMediaUrl = (mediaUrl || '').trim();
+            const hasMediaUrl = trimmedMediaUrl.length > 0;
+            const hasImageData = typeof imageData === 'string' && imageData.length > 0;
+
+            if (!hasMediaUrl && !hasImageData) {
                 return res.status(400).json({ error: 'Missing media data' });
             }
 
-            if (type === 'image' && imageData) {
-                // Handle image sending (base64)
+            if (hasMediaUrl) {
+                try {
+                    const fetch = (await import('node-fetch')).default;
+                    const response = await fetch(trimmedMediaUrl, { method: 'HEAD' });
+                    if (response.ok) {
+                        const contentLength = response.headers.get('content-length');
+                        if (contentLength) {
+                            const bytes = Number(contentLength);
+                            console.log(
+                                `🌐 Media remota reporta ${bytes} bytes (~${(bytes / (1024 * 1024)).toFixed(2)} MB)`
+                            );
+                        } else {
+                            console.log('🌐 Media remota sem header content-length informado');
+                        }
+                    } else {
+                        console.log(
+                            `⚠️ Não foi possível obter tamanho da mídia remota (status ${response.status})`
+                        );
+                    }
+                } catch (err) {
+                    console.log('⚠️ Erro ao consultar tamanho da mídia remota:', err.message);
+                }
+
+                const msg = { [type]: { url: trimmedMediaUrl }, caption };
+                if (type === 'document' && fileName) {
+                    msg.fileName = fileName;
+                }
+                await instance.sock.sendMessage(jid, msg);
+            } else if (type === 'image' && hasImageData) {
+                // Legacy fallback for base64 encoded images.
                 const buffer = Buffer.from(imageData, 'base64');
                 console.log(
                     `🧮 Base64 recebido com ${buffer.length} bytes (~${(buffer.length / (1024 * 1024)).toFixed(2)} MB)`
                 );
                 await instance.sock.sendMessage(jid, { image: buffer, caption });
             } else {
-                if (mediaUrl) {
-                    try {
-                        const fetch = (await import('node-fetch')).default;
-                        const response = await fetch(mediaUrl, { method: 'HEAD' });
-                        if (response.ok) {
-                            const contentLength = response.headers.get('content-length');
-                            if (contentLength) {
-                                const bytes = Number(contentLength);
-                                console.log(
-                                    `🌐 Media remota reporta ${bytes} bytes (~${(bytes / (1024 * 1024)).toFixed(2)} MB)`
-                                );
-                            } else {
-                                console.log('🌐 Media remota sem header content-length informado');
-                            }
-                        } else {
-                            console.log(
-                                `⚠️ Não foi possível obter tamanho da mídia remota (status ${response.status})`
-                            );
-                        }
-                    } catch (err) {
-                        console.log('⚠️ Erro ao consultar tamanho da mídia remota:', err.message);
-                    }
-                }
-                const msg = { [type]: { url: mediaUrl }, caption };
-                if (type === 'document' && fileName) {
-                    msg.fileName = fileName;
-                }
-                await instance.sock.sendMessage(jid, msg);
+                return res.status(400).json({ error: 'Missing media URL for this media type' });
             }
         } else {
             return res.status(400).json({ error: `Unsupported message type: ${type}` });
