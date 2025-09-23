@@ -13,7 +13,7 @@ app.use(cors({
     methods: ['*'],
     allowedHeaders: ['*']
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Global state management
 let instances = new Map(); // instanceId -> { sock, qr, connected, connecting, user }
