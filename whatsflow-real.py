@@ -8912,53 +8912,99 @@ class MessageScheduler:
             if conn:
                 conn.close()
     
+    def _build_baileys_payload(
+        self,
+        *,
+        instance_id: str,
+        group_id: str,
+        message_text: str,
+        message_type: str,
+        media_url: str,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Prepare the payload used to contact the Baileys service.
+
+        Returns a tuple ``(payload, error_message)``.
+        """
+
+        normalized_type = (message_type or 'text').strip().lower()
+        if normalized_type == 'media':
+            # Older records may store "media" instead of the concrete type.
+            normalized_type = 'image'
+
+        payload: Dict[str, Any] = {
+            'to': group_id,
+            'type': 'text',
+            'message': message_text or '',
+        }
+
+        if normalized_type == 'text':
+            return payload, None
+
+        if not media_url:
+            return None, 'URL de mídia não definida para mensagem de mídia agendada'
+
+        supported_media_types = {'image', 'audio', 'video', 'document'}
+        if normalized_type not in supported_media_types:
+            return None, f"Tipo de mídia não suportado: {message_type}"
+
+        payload['type'] = normalized_type
+        payload['mediaUrl'] = media_url
+
+        if normalized_type == 'document':
+            file_name = os.path.basename(urllib.parse.urlparse(media_url).path) or 'documento'
+            payload['fileName'] = file_name
+
+        if normalized_type == 'image':
+            http = _ensure_requests_dependency()
+            try:
+                download_response = http.get(media_url, timeout=(10, 45))
+                download_response.raise_for_status()
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "Não foi possível baixar mídia %s para envio direto: %s. Usando URL remota.",
+                    media_url,
+                    exc,
+                )
+            else:
+                payload['imageData'] = base64.b64encode(download_response.content).decode('ascii')
+                logger.debug(
+                    "Mídia baixada com sucesso para envio direto (%s bytes)",
+                    len(download_response.content),
+                )
+
+        return payload, None
+
     def _send_message_to_group(self, instance_id, group_id, message_text, message_type, media_url):
         """Send message to group via Baileys API"""
+
         try:
-            # Ensure the Baileys service is available before attempting to send
+            http = _ensure_requests_dependency()
+
             if not check_service_health(self.api_base_url):
                 error_msg = f"Baileys service indisponível em {self.api_base_url}"
                 print(f"❌ {error_msg}")
                 return False, error_msg
 
-            payload = {
-                'to': group_id,
-                'type': 'text',
-                'message': message_text or ''
-            }
+fix-media-message-sending-issue-7hg5n1
+            payload, payload_error = self._build_baileys_payload(
+                instance_id=instance_id,
+                group_id=group_id,
+                message_text=message_text,
+                message_type=message_type,
+                media_url=media_url or '',
+            )
 
-            if message_type != 'text':
-                if not media_url:
-                    error_msg = 'URL de mídia não definida para mensagem de mídia agendada'
-                    logger.error(error_msg)
-                    return False, error_msg
+            if payload_error:
+                logger.error(payload_error)
+                return False, payload_error
 
-                payload['type'] = message_type
-                payload['mediaUrl'] = media_url
-fix-media-message-sending-issue-xbv3pj
-
-                if message_type == 'image':
-                    try:
-                        download_response = requests.get(media_url, timeout=(10, 45))
-                        download_response.raise_for_status()
-                    except Exception as exc:
-                        logger.warning(
-                            "Não foi possível baixar mídia %s para envio direto: %s. Usando URL remota.",
-                            media_url,
-                            exc,
-                        )
-                    else:
-                        payload['imageData'] = base64.b64encode(download_response.content).decode('ascii')
-                        logger.debug(
-                            "Mídia baixada com sucesso para envio direto (%s bytes)",
-                            len(download_response.content),
-                        )
+            normalized_type = payload['type']
+            log_details = f"message_type={normalized_type}, media_url={media_url}"
 
 
             for attempt in range(3):
                 try:
-                    log_details = f"message_type={message_type}, media_url={media_url}"
-                    if message_type == 'text':
+                    if normalized_type == 'text':
                         logger.info(
                             f"📤 Enviando mensagem de texto ao grupo {group_id} ({log_details})"
                         )
@@ -8966,12 +9012,13 @@ fix-media-message-sending-issue-xbv3pj
                         logger.info(
                             f"📤 Enviando mensagem de mídia ao grupo {group_id} ({log_details})"
                         )
-                    response = requests.post(
+
+                    response = http.post(
                         f"{self.api_base_url}/send/{instance_id}",
                         json=payload,
                         timeout=(10, 180),
                     )
-                    
+
                     if response.status_code != 200:
                         try:
                             error_payload = response.json()
@@ -8984,7 +9031,8 @@ fix-media-message-sending-issue-xbv3pj
                         )
                         detail_message = error_detail or f"HTTP {response.status_code}"
                         return False, f"Baileys send failed ({response.status_code}): {detail_message}"
-fix-media-message-sending-issue-xbv3pj
+fix-media-message-sending-issue-7hg5n1
+
 
                     try:
                         response_data = response.json()
@@ -8997,22 +9045,22 @@ fix-media-message-sending-issue-xbv3pj
                         logger.error("Baileys indicou falha no envio: %s", error_detail)
                         return False, f"Baileys indicou falha no envio: {error_detail}"
 
-                    if message_type == 'text':
+fix-media-message-sending-issue-7hg5n1
+                    if normalized_type == 'text':
                         logger.info("✅ Mensagem de texto enviada ao grupo %s", group_id)
                     else:
                         logger.info("✅ Mensagem de mídia enviada ao grupo %s", group_id)
 
 
                     return True, None
-                except requests.exceptions.Timeout:
+                except http.exceptions.Timeout:  # type: ignore[attr-defined]
                     if attempt < 2:
                         time.sleep(2 ** attempt)
                         continue
                     logger.error("Baileys send timed out")
                     return False, "Baileys send timed out"
 
-
-        except Exception as e:
+        except Exception as e:  # pragma: no cover - defensive logging
             error_msg = f"Erro ao enviar via Baileys: {e}"
             print(f"❌ {error_msg}")
             return False, error_msg
