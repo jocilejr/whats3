@@ -20,6 +20,147 @@ const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
 app.use(express.json({ limit: BODY_LIMIT }));
 app.use(express.urlencoded({ limit: BODY_LIMIT, extended: true }));
 
+const BASE64_ALLOWED_CHARS = /^[A-Za-z0-9+/=\n\r\t ]+$/;
+const SUPPORTED_MEDIA_TYPES = new Set(['image', 'video', 'audio', 'document']);
+
+let cachedFetch = null;
+
+async function ensureFetch() {
+    if (cachedFetch) {
+        return cachedFetch;
+    }
+
+    const fetchModule = await import('node-fetch');
+    cachedFetch = fetchModule.default;
+    return cachedFetch;
+}
+
+function looksLikeBase64(value) {
+    if (!value) {
+        return false;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return false;
+    }
+
+    const lowered = trimmed.toLowerCase();
+    if (lowered.startsWith('data:')) {
+        return true;
+    }
+
+    if (lowered.startsWith('http://') || lowered.startsWith('https://')) {
+        return false;
+    }
+
+    if (trimmed.length < 128) {
+        return false;
+    }
+
+    if (!BASE64_ALLOWED_CHARS.test(trimmed)) {
+        return false;
+    }
+
+    return trimmed.replace(/\s+/g, '').length % 4 === 0;
+}
+
+function sanitizeMediaUrl(rawUrl) {
+    const trimmed = (rawUrl || '').trim();
+
+    if (!trimmed) {
+        return { error: 'URL de mídia obrigatória não fornecida.' };
+    }
+
+    const lowered = trimmed.toLowerCase();
+    if (!lowered.startsWith('http://') && !lowered.startsWith('https://')) {
+        if (looksLikeBase64(trimmed)) {
+            return {
+                error:
+                    'Envio de mídia em base64 detectado. Utilize apenas URLs HTTP/HTTPS acessíveis publicamente.',
+            };
+        }
+
+        return { error: 'URL de mídia deve começar com http:// ou https://.' };
+    }
+
+    return { url: trimmed };
+}
+
+async function inspectRemoteMedia(url) {
+    const fetch = await ensureFetch();
+    let response;
+
+    try {
+        response = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+    } catch (err) {
+        throw new Error(`Não foi possível acessar a mídia remota: ${err.message}`);
+    }
+
+    if (!response.ok) {
+        if (response.status === 405 || response.status === 501) {
+            try {
+                response = await fetch(url, { method: 'GET', redirect: 'follow' });
+            } catch (err) {
+                throw new Error(`Não foi possível acessar a mídia remota: ${err.message}`);
+            }
+
+            if (!response.ok) {
+                throw new Error(
+                    `Não foi possível acessar a mídia remota (status ${response.status}).`,
+                );
+            }
+
+            if (response.body && typeof response.body.cancel === 'function') {
+                response.body.cancel();
+            } else if (response.body && typeof response.body.destroy === 'function') {
+                response.body.destroy();
+            }
+        } else {
+            throw new Error(`Não foi possível acessar a mídia remota (status ${response.status}).`);
+        }
+    }
+
+    const contentLengthHeader = response.headers.get('content-length');
+    if (!contentLengthHeader) {
+        return { contentLength: null };
+    }
+
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isNaN(contentLength)) {
+        return { contentLength: null };
+    }
+
+    return { contentLength };
+}
+
+function buildMediaMessage(type, url, caption, providedFileName) {
+    const mediaContent = { url };
+
+    if (type === 'document') {
+        let fileName = providedFileName || '';
+        if (!fileName) {
+            try {
+                const parsed = new URL(url);
+                fileName = path.basename(parsed.pathname) || '';
+            } catch (err) {
+                fileName = '';
+            }
+        }
+
+        if (fileName) {
+            mediaContent.fileName = fileName;
+        }
+    }
+
+    const payload = { [type]: mediaContent };
+    if (caption) {
+        payload.caption = caption;
+    }
+
+    return payload;
+}
+
 // Global state management
 let instances = new Map(); // instanceId -> { sock, qr, connected, connecting, user }
 let currentQR = null;
@@ -424,8 +565,8 @@ app.post('/disconnect/:instanceId', (req, res) => {
 
 app.post('/send/:instanceId', async (req, res) => {
     const { instanceId } = req.params;
-    const { to, message, type = 'text', mediaUrl, fileName } = req.body;
-    const imageData = req.body?.imageData;
+    const { to, message, type: rawType = 'text', mediaUrl, fileName } = req.body;
+    const imageData = typeof req.body?.imageData === 'string' ? req.body.imageData.trim() : '';
 
     const instance = instances.get(instanceId);
     if (!instance || !instance.connected || !instance.sock) {
@@ -435,84 +576,74 @@ app.post('/send/:instanceId', async (req, res) => {
     try {
         const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
         const caption = message || '';
-        const mediaTypes = ['image', 'video', 'audio', 'document'];
+        const normalizedType = typeof rawType === 'string' ? rawType.trim().toLowerCase() : 'text';
 
-        if (type === 'text') {
+        if (normalizedType === 'text') {
             await instance.sock.sendMessage(jid, { text: message });
-        } else if (mediaTypes.includes(type)) {
-            const trimmedMediaUrl = (mediaUrl || '').trim();
-            const hasMediaUrl = trimmedMediaUrl.length > 0;
-            const hasImageData = typeof imageData === 'string' && imageData.trim().length > 0;
-
-            if (!hasMediaUrl) {
-                if (hasImageData) {
-                    try {
-                        const approxBytes = Buffer.from(imageData, 'base64').length;
-                        console.warn(
-                            `❌ Payload base64 recebido (${(approxBytes / (1024 * 1024)).toFixed(2)} MB). ` +
-                                'Envio em base64 não é mais suportado.'
-                        );
-                    } catch (err) {
-                        console.warn('❌ Payload base64 inválido recebido e descartado.');
-                    }
-                    return res.status(400).json({
-                        error:
-                            'Envio de mídia em base64 não é suportado. Utilize apenas mediaUrl pública acessível.',
-                    });
-                }
-
-                return res.status(400).json({ error: 'Missing media URL for this media type' });
-            }
-
-            if (hasMediaUrl) {
-                try {
-                    const fetch = (await import('node-fetch')).default;
-                    const response = await fetch(trimmedMediaUrl, { method: 'HEAD' });
-                    if (response.ok) {
-                        const contentLength = response.headers.get('content-length');
-                        if (contentLength) {
-                            const bytes = Number(contentLength);
-                            if (!Number.isNaN(bytes)) {
-                                if (bytes > MAX_MEDIA_BYTES) {
-                                    const sizeMb = (bytes / (1024 * 1024)).toFixed(2);
-                                    console.warn(`❌ Mídia remota com ${sizeMb} MB excede o limite suportado.`);
-                                    return res.status(413).json({
-                                        error: `Mídia remota excede o limite de ${MAX_MEDIA_BYTES / (1024 * 1024)} MB.`,
-                                    });
-                                }
-                                console.log(
-                                    `🌐 Media remota reporta ${bytes} bytes (~${(bytes / (1024 * 1024)).toFixed(2)} MB)`
-                                );
-                            } else {
-                                console.log('🌐 Media remota retornou Content-Length não numérico');
-                            }
-                        } else {
-                            console.log('🌐 Media remota sem header content-length informado');
-                        }
-                    } else {
-                        console.log(
-                            `⚠️ Não foi possível obter tamanho da mídia remota (status ${response.status})`
-                        );
-                    }
-                } catch (err) {
-                    console.log('⚠️ Erro ao consultar tamanho da mídia remota:', err.message);
-                }
-
-                const msg = { [type]: { url: trimmedMediaUrl }, caption };
-                if (type === 'document' && fileName) {
-                    msg.fileName = fileName;
-                }
-                await instance.sock.sendMessage(jid, msg);
-            }
-        } else {
-            return res.status(400).json({ error: `Unsupported message type: ${type}` });
+            console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
+            return res.json({ success: true, instanceId: instanceId });
         }
 
+        if (!SUPPORTED_MEDIA_TYPES.has(normalizedType)) {
+            return res.status(400).json({ error: `Unsupported message type: ${rawType}` });
+        }
+
+        if (imageData) {
+            try {
+                const approxBytes = Buffer.from(imageData, 'base64').length;
+                console.warn(
+                    `❌ Payload base64 recebido (${(approxBytes / (1024 * 1024)).toFixed(2)} MB). ` +
+                        'Envio em base64 não é suportado.'
+                );
+            } catch (err) {
+                console.warn('❌ Payload base64 inválido recebido e descartado.');
+            }
+
+            return res.status(400).json({
+                error: 'Envio de mídia em base64 não é suportado. Utilize apenas URLs públicas acessíveis.',
+            });
+        }
+
+        const sanitized = sanitizeMediaUrl(mediaUrl);
+        if (sanitized.error) {
+            return res.status(400).json({ error: sanitized.error });
+        }
+
+        let metadata;
+        try {
+            metadata = await inspectRemoteMedia(sanitized.url);
+        } catch (err) {
+            console.warn(`⚠️ Falha ao validar mídia remota: ${err.message}`);
+            return res.status(400).json({ error: err.message });
+        }
+
+        if (metadata.contentLength && metadata.contentLength > MAX_MEDIA_BYTES) {
+            const sizeMb = (metadata.contentLength / (1024 * 1024)).toFixed(2);
+            console.warn(`❌ Mídia remota com ${sizeMb} MB excede o limite suportado.`);
+            return res.status(413).json({
+                error: `Mídia remota excede o limite de ${MAX_MEDIA_BYTES / (1024 * 1024)} MB.`,
+            });
+        }
+
+        if (metadata.contentLength) {
+            console.log(
+                `🌐 Media remota reporta ${metadata.contentLength} bytes (~${(
+                    metadata.contentLength /
+                    (1024 * 1024)
+                ).toFixed(2)} MB)`
+            );
+        } else {
+            console.log('🌐 Media remota sem header content-length informado');
+        }
+
+        const messagePayload = buildMediaMessage(normalizedType, sanitized.url, caption, fileName);
+        await instance.sock.sendMessage(jid, messagePayload);
+
         console.log(`📤 Mensagem enviada da instância ${instanceId} para ${to}`);
-        res.json({ success: true, instanceId: instanceId });
+        return res.json({ success: true, instanceId: instanceId });
     } catch (error) {
         console.error(`❌ Erro ao enviar mensagem da instância ${instanceId}:`, error);
-        res.status(500).json({ error: error.message, instanceId: instanceId });
+        return res.status(500).json({ error: error.message, instanceId: instanceId });
     }
 });
 
