@@ -8,6 +8,7 @@ Instalação: python3 whatsflow-real.py
 Acesso: http://localhost:8888
 """
 
+import base64
 import json
 import sqlite3
 import uuid
@@ -8934,6 +8935,25 @@ class MessageScheduler:
 
                 payload['type'] = message_type
                 payload['mediaUrl'] = media_url
+fix-media-message-sending-issue-xbv3pj
+
+                if message_type == 'image':
+                    try:
+                        download_response = requests.get(media_url, timeout=(10, 45))
+                        download_response.raise_for_status()
+                    except Exception as exc:
+                        logger.warning(
+                            "Não foi possível baixar mídia %s para envio direto: %s. Usando URL remota.",
+                            media_url,
+                            exc,
+                        )
+                    else:
+                        payload['imageData'] = base64.b64encode(download_response.content).decode('ascii')
+                        logger.debug(
+                            "Mídia baixada com sucesso para envio direto (%s bytes)",
+                            len(download_response.content),
+                        )
+
 
             for attempt in range(3):
                 try:
@@ -8964,6 +8984,24 @@ class MessageScheduler:
                         )
                         detail_message = error_detail or f"HTTP {response.status_code}"
                         return False, f"Baileys send failed ({response.status_code}): {detail_message}"
+fix-media-message-sending-issue-xbv3pj
+
+                    try:
+                        response_data = response.json()
+                    except ValueError:
+                        logger.error("Baileys respondeu com payload inválido: %s", response.text)
+                        return False, "Resposta inválida do serviço Baileys"
+
+                    if not response_data.get('success', False):
+                        error_detail = response_data.get('error') or 'Resposta sem sucesso'
+                        logger.error("Baileys indicou falha no envio: %s", error_detail)
+                        return False, f"Baileys indicou falha no envio: {error_detail}"
+
+                    if message_type == 'text':
+                        logger.info("✅ Mensagem de texto enviada ao grupo %s", group_id)
+                    else:
+                        logger.info("✅ Mensagem de mídia enviada ao grupo %s", group_id)
+
 
                     return True, None
                 except requests.exceptions.Timeout:
