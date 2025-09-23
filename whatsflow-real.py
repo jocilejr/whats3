@@ -8,7 +8,6 @@ Instalação: python3 whatsflow-real.py
 Acesso: http://localhost:8888
 """
 
-import base64
 import json
 import sqlite3
 import uuid
@@ -8953,24 +8952,6 @@ class MessageScheduler:
         if normalized_type == 'document':
             file_name = os.path.basename(urllib.parse.urlparse(media_url).path) or 'documento'
             payload['fileName'] = file_name
-
-        if normalized_type == 'image':
-            http = _ensure_requests_dependency()
-            try:
-                download_response = http.get(media_url, timeout=(10, 45))
-                download_response.raise_for_status()
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.warning(
-                    "Não foi possível baixar mídia %s para envio direto: %s. Usando URL remota.",
-                    media_url,
-                    exc,
-                )
-            else:
-                payload['imageData'] = base64.b64encode(download_response.content).decode('ascii')
-                logger.debug(
-                    "Mídia baixada com sucesso para envio direto (%s bytes)",
-                    len(download_response.content),
-                )
 
         return payload, None
 
