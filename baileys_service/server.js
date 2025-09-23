@@ -13,7 +13,11 @@ app.use(cors({
     methods: ['*'],
     allowedHeaders: ['*']
 }));
-app.use(express.json({ limit: '50mb' }));
+
+// Allow configuring body size to avoid 413 PayloadTooLargeError when sending media as base64
+const BODY_LIMIT = process.env.BAILEYS_BODY_LIMIT || '100mb';
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ limit: BODY_LIMIT, extended: true }));
 
 // Global state management
 let instances = new Map(); // instanceId -> { sock, qr, connected, connecting, user }
