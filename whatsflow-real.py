@@ -83,6 +83,7 @@ _MINIO_CLIENT = None
 _MINIO_ENDPOINT = None
 _MINIO_SECURE_DEFAULT = False
 _MINIO_BUCKET_POLICY_APPLIED = False
+_MINIO_FORCE_PRESIGNED_URLS = False
 Minio = None
 
 
@@ -201,6 +202,7 @@ def reload_minio_settings_from_db() -> None:
 
     global MINIO_ENDPOINT_RAW, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET
     global MINIO_PUBLIC_URL, _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT, _MINIO_CLIENT
+    global _MINIO_BUCKET_POLICY_APPLIED, _MINIO_FORCE_PRESIGNED_URLS
 
     (
         MINIO_ENDPOINT_RAW,
@@ -220,6 +222,8 @@ def reload_minio_settings_from_db() -> None:
 
     # Force recreation of the client with the new configuration on the next usage.
     _MINIO_CLIENT = None
+    _MINIO_BUCKET_POLICY_APPLIED = False
+    _MINIO_FORCE_PRESIGNED_URLS = False
 
 
 def get_current_minio_settings() -> Dict[str, str]:
@@ -275,7 +279,7 @@ def _get_minio_public_base() -> str:
 
 
 def _build_minio_object_url(client, object_name: str) -> str:
-    if MINIO_PUBLIC_URL:
+    if MINIO_PUBLIC_URL and not _MINIO_FORCE_PRESIGNED_URLS:
         base = _get_minio_public_base()
         return f"{base}/{MINIO_BUCKET}/{object_name}"
 
@@ -304,6 +308,7 @@ def update_minio_runtime_configuration(
 
     global MINIO_ENDPOINT_RAW, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_PUBLIC_URL
     global _MINIO_ENDPOINT, _MINIO_SECURE_DEFAULT, _MINIO_CLIENT
+    global _MINIO_BUCKET_POLICY_APPLIED, _MINIO_FORCE_PRESIGNED_URLS
 
     if endpoint is not None:
         MINIO_ENDPOINT_RAW = endpoint or ""
@@ -323,6 +328,8 @@ def update_minio_runtime_configuration(
 
     # Força recriação do cliente com as novas credenciais na próxima utilização
     _MINIO_CLIENT = None
+    _MINIO_BUCKET_POLICY_APPLIED = False
+    _MINIO_FORCE_PRESIGNED_URLS = False
 
 
 def _ensure_minio_dependency():
@@ -436,7 +443,7 @@ API_BASE_URL = resolve_baileys_url()
 
 
 def ensure_minio_bucket(client=None):
-    global _MINIO_BUCKET_POLICY_APPLIED
+    global _MINIO_BUCKET_POLICY_APPLIED, _MINIO_FORCE_PRESIGNED_URLS
     client = client or get_minio_client()
     try:
         bucket_exists = client.bucket_exists(MINIO_BUCKET)
@@ -467,6 +474,7 @@ def ensure_minio_bucket(client=None):
                 MINIO_BUCKET,
                 exc,
             )
+            _MINIO_FORCE_PRESIGNED_URLS = True
         finally:
             _MINIO_BUCKET_POLICY_APPLIED = True
     return client
