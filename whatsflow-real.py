@@ -9505,6 +9505,14 @@ class MessageScheduler:
                             f"📤 Enviando mensagem de mídia ao grupo {group_id} ({log_details})"
                         )
 
+                    try:
+                        payload_preview = json.dumps(payload, ensure_ascii=False)
+                    except (TypeError, ValueError):
+                        payload_preview = str(payload)
+                    print(
+                        f"console.log ▶️ Corpo da requisição para Baileys ({instance_id}): {payload_preview}"
+                    )
+
                     response = http.post(
                         f"{self.api_base_url}/send/{instance_id}",
                         json=payload,
