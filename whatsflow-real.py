@@ -8193,9 +8193,12 @@ class BaileysManager:
                 },
                 "dependencies": {
                     "@whiskeysockets/baileys": "^6.7.0",
-                    "express": "^4.18.2",
                     "cors": "^2.8.5",
-                    "qrcode-terminal": "^0.12.0"
+                    "express": "^4.18.2",
+                    "node-fetch": "^2.6.7",
+                    "qrcode-terminal": "^0.12.0",
+                    "swagger-jsdoc": "^6.2.8",
+                    "swagger-ui-express": "^5.0.1"
                 },
                 "scripts": {
                     "start": "node server.js"
@@ -8215,15 +8218,383 @@ const makeWASocket = require('@whiskeysockets/baileys').default;
 const qrTerminal = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
 
 const app = express();
+const PORT = process.env.PORT || 3002;
+const BODY_LIMIT = '15mb';
+const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
+
 app.use(cors({
     origin: '*',
     credentials: true,
     methods: ['*'],
     allowedHeaders: ['*']
 }));
-app.use(express.json());
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ limit: BODY_LIMIT, extended: true }));
+
+const swaggerDefinition = {
+    openapi: '3.0.0',
+    info: {
+        title: 'WhatsFlow Baileys Service API',
+        version: '1.0.0',
+        description:
+            'Documentação da API responsável por gerenciar sessões do WhatsApp via Baileys.',
+    },
+    servers: [
+        {
+            url: process.env.SWAGGER_SERVER_URL || `http://localhost:${PORT}`,
+            description: 'Servidor atual do serviço Baileys',
+        },
+    ],
+    components: {
+        parameters: {
+            InstanceIdParam: {
+                name: 'instanceId',
+                in: 'path',
+                required: true,
+                schema: { type: 'string' },
+                description: 'Identificador único da instância Baileys',
+            },
+        },
+        schemas: {
+            InstanceState: {
+                type: 'object',
+                properties: {
+                    connected: { type: 'boolean', description: 'Indica se a instância está conectada.' },
+                    connecting: {
+                        type: 'boolean',
+                        description: 'Indica se a instância está em processo de conexão.',
+                    },
+                    user: {
+                        type: ['object', 'null'],
+                        description: 'Informações do usuário autenticado na instância.',
+                        properties: {
+                            id: { type: 'string' },
+                            name: { type: 'string' },
+                            profilePictureUrl: { type: ['string', 'null'] },
+                            phone: { type: 'string' },
+                        },
+                    },
+                    instanceId: { type: 'string' },
+                    lastSeen: {
+                        type: ['string', 'null'],
+                        format: 'date-time',
+                        description: 'Última vez que a instância teve atividade registrada.',
+                    },
+                },
+            },
+            InstancesStatusResponse: {
+                type: 'object',
+                additionalProperties: { $ref: '#/components/schemas/InstanceState' },
+            },
+            QrResponse: {
+                type: 'object',
+                properties: {
+                    qr: { type: ['string', 'null'], description: 'Conteúdo do QR Code para autenticação.' },
+                    connected: { type: 'boolean' },
+                    instanceId: { type: 'string' },
+                    expiresIn: {
+                        type: 'integer',
+                        description: 'Tempo em segundos até o QR Code expirar.',
+                    },
+                },
+            },
+            ActionResponse: {
+                type: 'object',
+                properties: {
+                    success: { type: 'boolean' },
+                    message: { type: 'string' },
+                    instanceId: { type: 'string' },
+                },
+            },
+            SendRequest: {
+                type: 'object',
+                required: ['to'],
+                properties: {
+                    to: {
+                        type: 'string',
+                        description:
+                            'Número do destinatário no formato MSISDN (com DDI). O sufixo @s.whatsapp.net é adicionado automaticamente quando omitido.',
+                    },
+                    message: {
+                        type: 'string',
+                        description: 'Conteúdo textual da mensagem ou URL da mídia quando aplicável.',
+                    },
+                    type: {
+                        type: 'string',
+                        description:
+                            "Tipo de mensagem a ser enviada. Utilize 'text', 'image', 'video', 'audio', 'document' ou 'media'.",
+                        default: 'text',
+                    },
+                    caption: {
+                        type: 'string',
+                        description: 'Legenda opcional enviada junto com mídias suportadas.',
+                    },
+                    mediaUrl: {
+                        type: 'string',
+                        description:
+                            'URL pública da mídia quando o tipo não for genérico. Obrigatória para image, video, audio ou document.',
+                    },
+                    fileName: {
+                        type: 'string',
+                        description: 'Nome do arquivo quando o tipo document for utilizado.',
+                    },
+                    mediaType: {
+                        type: 'string',
+                        description:
+                            "Quando type='media', especifica o tipo real da mídia (image, video, audio ou document).",
+                    },
+                },
+            },
+            SendSuccessResponse: {
+                type: 'object',
+                properties: {
+                    success: { type: 'boolean' },
+                    instanceId: { type: 'string' },
+                },
+            },
+            ErrorResponse: {
+                type: 'object',
+                properties: {
+                    error: { type: 'string' },
+                    instanceId: { type: 'string' },
+                },
+            },
+            GroupInfo: {
+                type: 'object',
+                properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    description: { type: 'string' },
+                    participants: { type: 'integer' },
+                    admin: { type: 'boolean' },
+                    created: { type: ['integer', 'null'] },
+                    lastMessage: {
+                        type: ['object', 'null'],
+                        properties: {
+                            text: { type: 'string' },
+                            timestamp: { type: ['integer', 'null'] },
+                        },
+                    },
+                },
+            },
+            GroupsResponse: {
+                type: 'object',
+                properties: {
+                    success: { type: 'boolean' },
+                    instanceId: { type: 'string' },
+                    count: { type: 'integer' },
+                    timestamp: { type: 'string', format: 'date-time' },
+                    groups: {
+                        type: 'array',
+                        items: { $ref: '#/components/schemas/GroupInfo' },
+                    },
+                    error: { type: 'string' },
+                },
+            },
+            HealthResponse: {
+                type: 'object',
+                properties: {
+                    status: { type: 'string' },
+                    instances: {
+                        type: 'object',
+                        properties: {
+                            total: { type: 'integer' },
+                            connected: { type: 'integer' },
+                            connecting: { type: 'integer' },
+                        },
+                    },
+                    uptime: { type: 'number' },
+                    timestamp: { type: 'string', format: 'date-time' },
+                },
+            },
+        },
+    },
+    paths: {
+        '/status': {
+            get: {
+                tags: ['Instâncias'],
+                summary: 'Lista o status de todas as instâncias ativas.',
+                responses: {
+                    200: {
+                        description: 'Status atual das instâncias monitoradas.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/InstancesStatusResponse' },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/status/{instanceId}': {
+            get: {
+                tags: ['Instâncias'],
+                summary: 'Recupera o status de uma instância específica.',
+                parameters: [{ $ref: '#/components/parameters/InstanceIdParam' }],
+                responses: {
+                    200: {
+                        description: 'Status detalhado da instância informada.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/InstanceState' },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/qr/{instanceId}': {
+            get: {
+                tags: ['Autenticação'],
+                summary: 'Obtém o QR Code atual de uma instância para autenticação.',
+                parameters: [{ $ref: '#/components/parameters/InstanceIdParam' }],
+                responses: {
+                    200: {
+                        description: 'Detalhes do QR Code vigente.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/QrResponse' },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/connect/{instanceId}': {
+            post: {
+                tags: ['Instâncias'],
+                summary: 'Inicia o processo de conexão de uma instância.',
+                parameters: [{ $ref: '#/components/parameters/InstanceIdParam' }],
+                responses: {
+                    200: {
+                        description: 'Resultado da requisição de conexão.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/ActionResponse' },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/disconnect/{instanceId}': {
+            post: {
+                tags: ['Instâncias'],
+                summary: 'Força a desconexão de uma instância conectada.',
+                parameters: [{ $ref: '#/components/parameters/InstanceIdParam' }],
+                responses: {
+                    200: {
+                        description: 'Resultado da tentativa de desconexão.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/ActionResponse' },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/send/{instanceId}': {
+            post: {
+                tags: ['Mensagens'],
+                summary: 'Envia mensagens de texto ou mídias para um contato.',
+                parameters: [{ $ref: '#/components/parameters/InstanceIdParam' }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: { $ref: '#/components/schemas/SendRequest' },
+                        },
+                    },
+                },
+                responses: {
+                    200: {
+                        description: 'Mensagem aceita para envio.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/SendSuccessResponse' },
+                            },
+                        },
+                    },
+                    400: {
+                        description: 'Requisição inválida ou instância não conectada.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/ErrorResponse' },
+                            },
+                        },
+                    },
+                    500: {
+                        description: 'Erro interno ao processar o envio.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/ErrorResponse' },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/groups/{instanceId}': {
+            get: {
+                tags: ['Grupos'],
+                summary: 'Lista grupos associados à instância.',
+                parameters: [{ $ref: '#/components/parameters/InstanceIdParam' }],
+                responses: {
+                    200: {
+                        description: 'Grupos recuperados com sucesso.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/GroupsResponse' },
+                            },
+                        },
+                    },
+                    400: {
+                        description: 'Instância não conectada ou inexistente.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/GroupsResponse' },
+                            },
+                        },
+                    },
+                    500: {
+                        description: 'Erro interno ao consultar os grupos.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/GroupsResponse' },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/health': {
+            get: {
+                tags: ['Utilitários'],
+                summary: 'Consulta o estado geral do serviço.',
+                responses: {
+                    200: {
+                        description: 'Informações de saúde do serviço.',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/HealthResponse' },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+};
+
+const swaggerSpec = swaggerJsdoc({ definition: swaggerDefinition, apis: [] });
+
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));
+app.get('/docs.json', (req, res) => res.json(swaggerSpec));
 
 // Global state management
 let instances = new Map(); // instanceId -> { sock, qr, connected, connecting, user }
@@ -8761,7 +9132,6 @@ app.get('/health', (req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 3002;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Baileys service rodando na porta ${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
